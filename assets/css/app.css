@@ -1,1 +1,274 @@
+/* =========================================================
+   ROOT
+   ========================================================= */
 
+:root {
+  --page-background: #000000;
+  --page-foreground: #ffffff;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  --intro-padding-mobile: 15px;
+  --intro-padding-tablet: 32px;
+  --intro-padding-desktop: 56px;
+
+  --logo-width-mobile: min(76vw, 410px);
+  --logo-width-tablet: min(58vw, 560px);
+  --logo-width-desktop: min(42vw, 680px);
+
+  --logo-stop-mobile: 19vh;
+  --logo-stop-desktop: 14vh;
+
+  --logo-duration: 2400ms;
+  --logo-easing: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* =========================================================
+   RESET
+   ========================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--page-background);
+  color: var(--page-foreground);
+
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+  min-height: 100svh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+
+  background: var(--page-background);
+  color: var(--page-foreground);
+
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* =========================================================
+   INTRO SCREEN
+   ========================================================= */
+
+.intro {
+  position: fixed;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+  min-height: 100svh;
+
+  overflow: hidden;
+  isolation: isolate;
+
+  background: var(--page-background);
+}
+
+.intro__content {
+  position: absolute;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  pointer-events: none;
+}
+
+/* =========================================================
+   LOGO
+   ========================================================= */
+
+.intro__logo {
+  position: absolute;
+
+  top: calc(var(--safe-top) + var(--logo-stop-mobile));
+  left: calc(var(--safe-left) + var(--intro-padding-mobile));
+
+  width: var(--logo-width-mobile);
+  height: auto;
+
+  margin: 0;
+  padding: 0;
+
+  object-fit: contain;
+  object-position: left top;
+
+  opacity: 0;
+
+  transform:
+    translate3d(
+      0,
+      calc(-100% - var(--logo-stop-mobile) - var(--safe-top) - 48px),
+      0
+    );
+
+  transform-origin: left top;
+
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+
+  transition:
+    transform var(--logo-duration) var(--logo-easing),
+    opacity 420ms ease-out;
+}
+
+/* JavaScript spustí tuto třídu po úvodní prodlevě. */
+
+.intro.is-logo-visible .intro__logo {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* Po dokončení animace odstraníme will-change. */
+
+.intro.is-logo-settled .intro__logo {
+  will-change: auto;
+}
+
+/* =========================================================
+   SMALL MOBILE
+   ========================================================= */
+
+@media (max-width: 374px) {
+  :root {
+    --intro-padding-mobile: 13px;
+    --logo-width-mobile: min(79vw, 360px);
+    --logo-stop-mobile: 18vh;
+  }
+}
+
+/* =========================================================
+   LARGE MOBILE
+   ========================================================= */
+
+@media (min-width: 430px) and (max-width: 767px) {
+  :root {
+    --intro-padding-mobile: 18px;
+    --logo-width-mobile: min(72vw, 460px);
+    --logo-stop-mobile: 18vh;
+  }
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .intro__logo {
+    top: calc(var(--safe-top) + 16vh);
+    left: calc(var(--safe-left) + var(--intro-padding-tablet));
+
+    width: var(--logo-width-tablet);
+
+    transform:
+      translate3d(
+        0,
+        calc(-100% - 16vh - var(--safe-top) - 64px),
+        0
+      );
+  }
+
+  .intro.is-logo-visible .intro__logo {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* =========================================================
+   DESKTOP
+   ========================================================= */
+
+@media (min-width: 1200px) {
+  .intro__logo {
+    top: calc(var(--safe-top) + var(--logo-stop-desktop));
+    left: calc(var(--safe-left) + var(--intro-padding-desktop));
+
+    width: var(--logo-width-desktop);
+
+    transform:
+      translate3d(
+        0,
+        calc(-100% - var(--logo-stop-desktop) - var(--safe-top) - 80px),
+        0
+      );
+  }
+
+  .intro.is-logo-visible .intro__logo {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* =========================================================
+   VERY WIDE DESKTOP
+   ========================================================= */
+
+@media (min-width: 1800px) {
+  :root {
+    --intro-padding-desktop: 72px;
+    --logo-width-desktop: min(38vw, 760px);
+    --logo-stop-desktop: 13vh;
+  }
+}
+
+/* =========================================================
+   LANDSCAPE MOBILE
+   ========================================================= */
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .intro__logo {
+    top: calc(var(--safe-top) + 8vh);
+    left: calc(var(--safe-left) + 20px);
+
+    width: min(42vw, 390px);
+
+    transform:
+      translate3d(
+        0,
+        calc(-100% - 8vh - var(--safe-top) - 32px),
+        0
+      );
+  }
+
+  .intro.is-logo-visible .intro__logo {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .intro__logo {
+    transition:
+      transform 700ms ease-out,
+      opacity 300ms ease-out;
+  }
+}
