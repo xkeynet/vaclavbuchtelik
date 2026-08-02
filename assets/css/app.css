@@ -5,6 +5,7 @@
 :root {
   --page-background: #000000;
   --page-foreground: #ffffff;
+  --page-accent: #fe2c55;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
@@ -20,10 +21,31 @@
   --logo-width-desktop: min(42vw, 680px);
 
   --logo-stop-mobile: 19vh;
+  --logo-stop-tablet: 16vh;
   --logo-stop-desktop: 14vh;
 
   --logo-duration: 2400ms;
   --logo-easing: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --enter-font-size-mobile: clamp(22px, 6vw, 29px);
+  --enter-font-size-tablet: clamp(26px, 3.4vw, 34px);
+  --enter-font-size-desktop: clamp(28px, 2vw, 38px);
+
+  --enter-letter-spacing: 0.1em;
+
+  --gate-gap-mobile: 16px;
+  --gate-gap-tablet: 20px;
+  --gate-gap-desktop: 24px;
+
+  --arrow-size-mobile: 28px;
+  --arrow-size-tablet: 32px;
+  --arrow-size-desktop: 34px;
+
+  --enter-duration: 1600ms;
+  --enter-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
+
+  --arrow-cycle-duration: 3000ms;
+  --arrow-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
 }
 
 /* =========================================================
@@ -41,6 +63,7 @@ html {
   min-height: 100%;
   margin: 0;
   padding: 0;
+
   background: var(--page-background);
   color: var(--page-foreground);
 
@@ -63,11 +86,44 @@ body {
 
   overscroll-behavior: none;
   touch-action: manipulation;
+
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Display",
+    "SF Pro Text",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  margin: 0;
+  padding: 0;
+
+  appearance: none;
+  -webkit-appearance: none;
+
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
 }
 
 img {
   display: block;
   max-width: 100%;
+
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
@@ -132,6 +188,7 @@ img {
   transform-origin: left top;
 
   will-change: transform, opacity;
+
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 
@@ -140,17 +197,278 @@ img {
     opacity 420ms ease-out;
 }
 
-/* JavaScript spustí tuto třídu po úvodní prodlevě. */
-
 .intro.is-logo-visible .intro__logo {
   opacity: 1;
   transform: translate3d(0, 0, 0);
 }
 
-/* Po dokončení animace odstraníme will-change. */
-
 .intro.is-logo-settled .intro__logo {
   will-change: auto;
+}
+
+/* =========================================================
+   ENTER GATE
+   ========================================================= */
+
+.intro__gate {
+  position: absolute;
+
+  top:
+    calc(
+      var(--safe-top) +
+      var(--logo-stop-mobile) +
+      var(--logo-width-mobile) +
+      var(--gate-gap-mobile)
+    );
+
+  left: calc(var(--safe-left) + var(--intro-padding-mobile));
+
+  width: var(--logo-width-mobile);
+  height: 160px;
+
+  opacity: 1;
+  visibility: visible;
+
+  pointer-events: none;
+}
+
+/* =========================================================
+   ENTER
+   ========================================================= */
+
+.intro__enter {
+  position: absolute;
+
+  top: 0;
+  left: 0;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+
+  min-width: 0;
+  min-height: 44px;
+
+  padding: 0;
+
+  color: var(--page-foreground);
+  background: transparent;
+
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Display",
+    "SF Pro Text",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+
+  font-size: var(--enter-font-size-mobile);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: var(--enter-letter-spacing);
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+
+  opacity: 0;
+
+  transform: translate3d(calc(100vw + 100%), 0, 0);
+  transform-origin: left center;
+
+  cursor: pointer;
+  pointer-events: auto;
+
+  will-change: transform, opacity, color;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+
+  transition:
+    transform var(--enter-duration) var(--enter-easing),
+    opacity 320ms ease-out,
+    color 120ms linear;
+
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.intro__enter:focus {
+  outline: none;
+}
+
+.intro__enter:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 7px;
+}
+
+.intro.is-enter-visible .intro__enter {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.intro.is-enter-settled .intro__enter {
+  will-change: color;
+}
+
+/* =========================================================
+   ARROW
+   ========================================================= */
+
+.intro__arrow {
+  position: absolute;
+
+  top: 54px;
+  left: 0;
+
+  width: var(--arrow-size-mobile);
+  height: var(--arrow-size-mobile);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  opacity: 0;
+
+  transform: translate3d(0, calc(100svh + 100%), 0);
+  transform-origin: 50% 50%;
+
+  pointer-events: none;
+
+  will-change: transform, opacity;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.intro__arrow-icon {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: contain;
+
+  transform: rotate(0deg) translateZ(0);
+  transform-origin: 50% 50%;
+
+  will-change: transform;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+
+  filter:
+    drop-shadow(0 0 2px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 2px 8px rgba(0, 0, 0, 0.45));
+}
+
+/* =========================================================
+   ACTIVE ARROW CYCLE
+   ========================================================= */
+
+.intro.is-arrow-cycling .intro__arrow {
+  animation:
+    introArrowTravel
+    var(--arrow-cycle-duration)
+    linear
+    infinite;
+}
+
+.intro.is-arrow-cycling .intro__arrow-icon {
+  animation:
+    introArrowSpin
+    var(--arrow-cycle-duration)
+    var(--arrow-easing)
+    infinite;
+}
+
+.intro.is-arrow-cycling .intro__enter {
+  animation:
+    introEnterFlash
+    var(--arrow-cycle-duration)
+    linear
+    infinite;
+}
+
+/* =========================================================
+   ARROW TRAVEL
+   ========================================================= */
+
+@keyframes introArrowTravel {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, calc(100svh + 100%), 0);
+  }
+
+  8% {
+    opacity: 1;
+  }
+
+  42% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  90% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* =========================================================
+   ARROW SPIN
+   900° = dvě celé otočky + finální půlotáčka
+   ========================================================= */
+
+@keyframes introArrowSpin {
+  0% {
+    transform: rotate(0deg) translateZ(0);
+  }
+
+  42% {
+    transform: rotate(0deg) translateZ(0);
+  }
+
+  90% {
+    transform: rotate(900deg) translateZ(0);
+  }
+
+  100% {
+    transform: rotate(900deg) translateZ(0);
+  }
+}
+
+/* =========================================================
+   ENTER FLASH
+   ========================================================= */
+
+@keyframes introEnterFlash {
+  0%,
+  78% {
+    color: var(--page-foreground);
+  }
+
+  79%,
+  98% {
+    color: var(--page-accent);
+  }
+
+  100% {
+    color: var(--page-foreground);
+  }
+}
+
+/* =========================================================
+   ENTER INTERACTION
+   ========================================================= */
+
+.intro__enter:active {
+  transform: translate3d(0, 0, 0) scale(0.97);
 }
 
 /* =========================================================
@@ -162,6 +480,19 @@ img {
     --intro-padding-mobile: 13px;
     --logo-width-mobile: min(79vw, 360px);
     --logo-stop-mobile: 18vh;
+
+    --enter-font-size-mobile: clamp(20px, 6vw, 26px);
+    --gate-gap-mobile: 13px;
+
+    --arrow-size-mobile: 26px;
+  }
+
+  .intro__gate {
+    height: 145px;
+  }
+
+  .intro__arrow {
+    top: 50px;
   }
 }
 
@@ -174,6 +505,15 @@ img {
     --intro-padding-mobile: 18px;
     --logo-width-mobile: min(72vw, 460px);
     --logo-stop-mobile: 18vh;
+
+    --enter-font-size-mobile: clamp(24px, 5.6vw, 31px);
+    --gate-gap-mobile: 17px;
+
+    --arrow-size-mobile: 30px;
+  }
+
+  .intro__arrow {
+    top: 57px;
   }
 }
 
@@ -183,7 +523,7 @@ img {
 
 @media (min-width: 768px) and (max-width: 1199px) {
   .intro__logo {
-    top: calc(var(--safe-top) + 16vh);
+    top: calc(var(--safe-top) + var(--logo-stop-tablet));
     left: calc(var(--safe-left) + var(--intro-padding-tablet));
 
     width: var(--logo-width-tablet);
@@ -191,13 +531,39 @@ img {
     transform:
       translate3d(
         0,
-        calc(-100% - 16vh - var(--safe-top) - 64px),
+        calc(-100% - var(--logo-stop-tablet) - var(--safe-top) - 64px),
         0
       );
   }
 
   .intro.is-logo-visible .intro__logo {
     transform: translate3d(0, 0, 0);
+  }
+
+  .intro__gate {
+    top:
+      calc(
+        var(--safe-top) +
+        var(--logo-stop-tablet) +
+        var(--logo-width-tablet) +
+        var(--gate-gap-tablet)
+      );
+
+    left: calc(var(--safe-left) + var(--intro-padding-tablet));
+
+    width: var(--logo-width-tablet);
+    height: 180px;
+  }
+
+  .intro__enter {
+    font-size: var(--enter-font-size-tablet);
+  }
+
+  .intro__arrow {
+    top: 62px;
+
+    width: var(--arrow-size-tablet);
+    height: var(--arrow-size-tablet);
   }
 }
 
@@ -223,6 +589,32 @@ img {
   .intro.is-logo-visible .intro__logo {
     transform: translate3d(0, 0, 0);
   }
+
+  .intro__gate {
+    top:
+      calc(
+        var(--safe-top) +
+        var(--logo-stop-desktop) +
+        var(--logo-width-desktop) +
+        var(--gate-gap-desktop)
+      );
+
+    left: calc(var(--safe-left) + var(--intro-padding-desktop));
+
+    width: var(--logo-width-desktop);
+    height: 190px;
+  }
+
+  .intro__enter {
+    font-size: var(--enter-font-size-desktop);
+  }
+
+  .intro__arrow {
+    top: 68px;
+
+    width: var(--arrow-size-desktop);
+    height: var(--arrow-size-desktop);
+  }
 }
 
 /* =========================================================
@@ -234,6 +626,15 @@ img {
     --intro-padding-desktop: 72px;
     --logo-width-desktop: min(38vw, 760px);
     --logo-stop-desktop: 13vh;
+
+    --enter-font-size-desktop: 40px;
+    --gate-gap-desktop: 28px;
+
+    --arrow-size-desktop: 36px;
+  }
+
+  .intro__arrow {
+    top: 72px;
   }
 }
 
@@ -259,6 +660,33 @@ img {
   .intro.is-logo-visible .intro__logo {
     transform: translate3d(0, 0, 0);
   }
+
+  .intro__gate {
+    top:
+      calc(
+        var(--safe-top) +
+        8vh +
+        min(42vw, 390px) +
+        8px
+      );
+
+    left: calc(var(--safe-left) + 20px);
+
+    width: min(42vw, 390px);
+    height: 105px;
+  }
+
+  .intro__enter {
+    min-height: 34px;
+    font-size: clamp(18px, 2.8vw, 25px);
+  }
+
+  .intro__arrow {
+    top: 38px;
+
+    width: 24px;
+    height: 24px;
+  }
 }
 
 /* =========================================================
@@ -270,5 +698,24 @@ img {
     transition:
       transform 700ms ease-out,
       opacity 300ms ease-out;
+  }
+
+  .intro__enter {
+    transition:
+      transform 700ms ease-out,
+      opacity 300ms ease-out,
+      color 120ms linear;
+  }
+
+  .intro.is-arrow-cycling .intro__arrow {
+    animation-duration: 3000ms;
+  }
+
+  .intro.is-arrow-cycling .intro__arrow-icon {
+    animation-duration: 3000ms;
+  }
+
+  .intro.is-arrow-cycling .intro__enter {
+    animation-duration: 3000ms;
   }
 }
