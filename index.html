@@ -183,6 +183,13 @@
     fetchpriority="high"
   >
 
+  <link
+    rel="preload"
+    href="/assets/icons/arrow-up.svg"
+    as="image"
+    type="image/svg+xml"
+  >
+
   <!-- =========================================================
        GOOGLE ANALYTICS
        ========================================================= -->
@@ -211,6 +218,10 @@
 <body>
   <main class="intro" id="intro">
     <div class="intro__content">
+
+      <!-- =====================================================
+           LOGO
+           ===================================================== -->
       <img
         class="intro__logo"
         id="introLogo"
@@ -222,13 +233,48 @@
         fetchpriority="high"
         draggable="false"
       >
+
+      <!-- =====================================================
+           ENTER GATE
+           ===================================================== -->
+      <div class="intro__gate" id="introGate">
+        <button
+          class="intro__enter"
+          id="introEnter"
+          type="button"
+          aria-label="Enter the Václav Buchtelík website"
+        >
+          ENTER
+        </button>
+
+        <span
+          class="intro__arrow"
+          id="introArrow"
+          aria-hidden="true"
+        >
+          <img
+            class="intro__arrow-icon"
+            src="/assets/icons/arrow-up.svg"
+            alt=""
+            width="24"
+            height="24"
+            decoding="async"
+            draggable="false"
+          >
+        </span>
+      </div>
+
     </div>
   </main>
 
   <noscript>
     <style>
-      .intro__logo {
+      .intro__logo,
+      .intro__gate,
+      .intro__enter,
+      .intro__arrow {
         opacity: 1 !important;
+        visibility: visible !important;
         transform: translate3d(0, 0, 0) !important;
       }
     </style>
