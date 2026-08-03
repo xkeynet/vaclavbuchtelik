@@ -7,6 +7,10 @@
   --page-foreground: #ffffff;
   --page-accent: #fe2c55;
 
+  --intro-background-image: url("/assets/vb-web.jpg");
+  --intro-background-position: center center;
+  --intro-overlay: rgba(0, 0, 0, 0.55);
+
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -147,12 +151,65 @@ img {
   background: var(--page-background);
 }
 
+/* Fullscreen background photograph. */
+
+.intro::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  background-image: var(--intro-background-image);
+  background-position: var(--intro-background-position);
+  background-repeat: no-repeat;
+  background-size: cover;
+
+  z-index: 0;
+  pointer-events: none;
+
+  transform: translateZ(0) scale(1.001);
+  transform-origin: center center;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Dark smoke overlay copied from the Tikboo gate logic. */
+
+.intro::after {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  background: var(--intro-overlay);
+
+  z-index: 1;
+  pointer-events: none;
+
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+
+  transform: translateZ(0);
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
 .intro__content {
   position: absolute;
   inset: 0;
 
   width: 100%;
   height: 100%;
+
+  z-index: 2;
 
   pointer-events: none;
 }
