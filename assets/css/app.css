@@ -9,6 +9,7 @@
 
   --intro-background-image: url("/assets/vb-web.jpg");
   --intro-background-position: center center;
+  --intro-video-position: center center;
   --intro-overlay: rgba(0, 0, 0, 0.55);
 
   --safe-top: env(safe-area-inset-top, 0px);
@@ -50,6 +51,8 @@
 
   --arrow-cycle-duration: 3000ms;
   --arrow-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
+
+  --video-reveal-duration: 180ms;
 }
 
 /* =========================================================
@@ -124,13 +127,19 @@ button {
   color: inherit;
 }
 
-img {
+img,
+video {
   display: block;
   max-width: 100%;
 
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
+}
+
+video {
+  border: 0;
+  outline: 0;
 }
 
 /* =========================================================
@@ -151,7 +160,9 @@ img {
   background: var(--page-background);
 }
 
-/* Fullscreen background photograph. */
+/* =========================================================
+   FALLBACK / POSTER PHOTOGRAPH
+   ========================================================= */
 
 .intro::before {
   content: "";
@@ -166,6 +177,7 @@ img {
   background-position: var(--intro-background-position);
   background-repeat: no-repeat;
   background-size: cover;
+  background-color: var(--page-background);
 
   z-index: 0;
   pointer-events: none;
@@ -177,7 +189,86 @@ img {
   -webkit-backface-visibility: hidden;
 }
 
-/* Dark smoke overlay copied from the Tikboo gate logic. */
+/* =========================================================
+   DYNAMIC INTRO VIDEO
+   Element vytvoří app.js.
+   ========================================================= */
+
+.intro__video {
+  position: absolute;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+
+  margin: 0;
+  padding: 0;
+
+  object-fit: cover;
+  object-position: var(--intro-video-position);
+
+  background: transparent;
+
+  z-index: 1;
+
+  opacity: 0;
+  visibility: visible;
+
+  pointer-events: auto;
+  cursor: pointer;
+
+  transform: translateZ(0) scale(1.001);
+  transform-origin: center center;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+
+  will-change: opacity;
+
+  transition:
+    opacity var(--video-reveal-duration) linear;
+
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.intro.is-video-ready .intro__video {
+  opacity: 1;
+}
+
+.intro.is-video-settled .intro__video {
+  will-change: auto;
+}
+
+/* Skryje nativní ovládací prvky videa. */
+
+.intro__video::-webkit-media-controls {
+  display: none !important;
+}
+
+.intro__video::-webkit-media-controls-enclosure {
+  display: none !important;
+}
+
+.intro__video::-webkit-media-controls-panel {
+  display: none !important;
+}
+
+.intro__video::-webkit-media-controls-play-button {
+  display: none !important;
+}
+
+.intro__video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+
+/* =========================================================
+   DARK SMOKE OVERLAY
+   Stejný princip jako Tikboo gate.
+   ========================================================= */
 
 .intro::after {
   content: "";
@@ -190,7 +281,7 @@ img {
 
   background: var(--intro-overlay);
 
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
 
   backdrop-filter: none;
@@ -202,6 +293,10 @@ img {
   -webkit-backface-visibility: hidden;
 }
 
+/* =========================================================
+   FOREGROUND CONTENT
+   ========================================================= */
+
 .intro__content {
   position: absolute;
   inset: 0;
@@ -209,7 +304,7 @@ img {
   width: 100%;
   height: 100%;
 
-  z-index: 2;
+  z-index: 3;
 
   pointer-events: none;
 }
@@ -751,6 +846,10 @@ img {
    ========================================================= */
 
 @media (prefers-reduced-motion: reduce) {
+  .intro__video {
+    transition-duration: 1ms;
+  }
+
   .intro__logo {
     transition:
       transform 700ms ease-out,
