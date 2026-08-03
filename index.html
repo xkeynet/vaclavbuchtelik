@@ -190,6 +190,13 @@
     type="image/svg+xml"
   >
 
+  <link
+    rel="preload"
+    href="/assets/icons/mute.svg"
+    as="image"
+    type="image/svg+xml"
+  >
+
   <!-- =========================================================
        GOOGLE ANALYTICS
        ========================================================= -->
@@ -264,6 +271,28 @@
         </span>
       </div>
 
+      <!-- =====================================================
+           SOUND CONTROL
+           ===================================================== -->
+      <button
+        class="intro__sound"
+        id="introSound"
+        type="button"
+        aria-label="Turn sound on"
+        aria-pressed="false"
+      >
+        <img
+          class="intro__sound-icon"
+          id="introSoundIcon"
+          src="/assets/icons/mute.svg"
+          alt=""
+          width="24"
+          height="24"
+          decoding="async"
+          draggable="false"
+        >
+      </button>
+
     </div>
   </main>
 
@@ -272,7 +301,8 @@
       .intro__logo,
       .intro__gate,
       .intro__enter,
-      .intro__arrow {
+      .intro__arrow,
+      .intro__sound {
         opacity: 1 !important;
         visibility: visible !important;
         transform: translate3d(0, 0, 0) !important;
