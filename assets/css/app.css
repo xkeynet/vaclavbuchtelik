@@ -1045,3 +1045,108 @@ video {
     animation-duration: 3000ms;
   }
 }
+
+/* =========================================================
+   MOBILE INTRO — LEFT ART COMPOSITION
+   Logo + rotated ENTER + travelling arrow
+   ========================================================= */
+
+@media (max-width: 767px) {
+  /* Logo skončí výrazně výš. */
+  .intro__logo {
+    top:
+      calc(
+        var(--safe-top) +
+        4vh
+      );
+  }
+
+  /*
+   * Gate se nově používá jako plocha přes celý displej.
+   * Jeho pozice už není počítaná z čtvercového PNG loga.
+   */
+  .intro__gate {
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+
+    pointer-events: none;
+  }
+
+  /*
+   * ENTER:
+   * - stále je to jeden horizontální textový řetězec,
+   * - celý je otočený o -90°,
+   * - přijíždí stejně zprava doleva,
+   * - E zůstává dole, takže šipka může skončit pod E.
+   */
+  .intro__enter {
+    top:
+      calc(
+        var(--safe-top) +
+        42vh
+      );
+
+    left:
+      calc(
+        var(--safe-left) +
+        var(--intro-padding-mobile)
+      );
+
+    min-height: 44px;
+
+    font-weight: 700;
+
+    transform:
+      translate3d(
+        calc(100vw + 100%),
+        0,
+        0
+      )
+      rotate(-90deg);
+
+    transform-origin: left center;
+  }
+
+  .intro.is-enter-visible .intro__enter {
+    opacity: 1;
+
+    transform:
+      translate3d(0, 0, 0)
+      rotate(-90deg);
+  }
+
+  .intro__enter:active {
+    transform:
+      translate3d(0, 0, 0)
+      rotate(-90deg)
+      scale(0.97);
+  }
+
+  /*
+   * Šipka:
+   * - jede stále zdola nahoru,
+   * - její osa kopíruje levý okraj,
+   * - končí těsně pod spodním E,
+   * - je mírně větší.
+   */
+  .intro__arrow {
+    top:
+      calc(
+        var(--safe-top) +
+        42vh +
+        18px
+      );
+
+    left:
+      calc(
+        var(--safe-left) +
+        var(--intro-padding-mobile) +
+        2px
+      );
+
+    width: 34px;
+    height: 34px;
+  }
+}
