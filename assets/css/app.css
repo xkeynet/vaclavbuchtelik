@@ -593,7 +593,7 @@ video {
   object-fit: contain;
   object-position: center;
 
-  opacity: 1;
+  opacity: 0.5;
 
   filter: none;
 
