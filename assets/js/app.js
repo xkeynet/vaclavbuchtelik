@@ -41,7 +41,21 @@
   const enter = document.getElementById('introEnter');
   const arrow = document.getElementById('introArrow');
 
-  if (!intro || !logo || !gate || !enter || !arrow) {
+  const soundButton =
+    document.getElementById('introSound');
+
+  const soundIcon =
+    document.getElementById('introSoundIcon');
+
+  if (
+    !intro ||
+    !logo ||
+    !gate ||
+    !enter ||
+    !arrow ||
+    !soundButton ||
+    !soundIcon
+  ) {
     return;
   }
 
@@ -111,24 +125,63 @@
   };
 
   /* =========================================================
+     SOUND UI
+     ========================================================= */
+
+  const syncSoundUI = () => {
+    soundButton.classList.toggle(
+      'is-sound-on',
+      soundEnabled
+    );
+
+    soundButton.setAttribute(
+      'aria-pressed',
+      soundEnabled ? 'true' : 'false'
+    );
+
+    soundButton.setAttribute(
+      'aria-label',
+      soundEnabled
+        ? 'Turn sound off'
+        : 'Turn sound on'
+    );
+
+    soundButton.title = soundEnabled
+      ? 'Turn sound off'
+      : 'Turn sound on';
+  };
+
+  const disableSoundButton = () => {
+    soundButton.disabled = true;
+    soundButton.setAttribute('aria-disabled', 'true');
+    soundButton.tabIndex = -1;
+  };
+
+  /* =========================================================
      VIDEO HELPERS
      ========================================================= */
 
   const tryPlay = (video) => {
     if (!video || videoDestroyed) {
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
 
-    const playPromise = video.play();
+    try {
+      const playPromise = video.play();
 
-    if (
-      playPromise &&
-      typeof playPromise.catch === 'function'
-    ) {
-      return playPromise.catch(() => {});
+      if (
+        playPromise &&
+        typeof playPromise.then === 'function'
+      ) {
+        return playPromise
+          .then(() => true)
+          .catch(() => false);
+      }
+
+      return Promise.resolve(true);
+    } catch (error) {
+      return Promise.resolve(false);
     }
-
-    return Promise.resolve();
   };
 
   const createIntroVideo = () => {
@@ -152,6 +205,7 @@
     video.setAttribute('preload', 'auto');
     video.setAttribute('disablepictureinpicture', '');
     video.setAttribute('x-webkit-airplay', 'deny');
+
     video.setAttribute(
       'controlslist',
       'nodownload noplaybackrate noremoteplayback'
@@ -182,9 +236,12 @@
     if (
       frameCallbackId &&
       introVideo &&
-      typeof introVideo.cancelVideoFrameCallback === 'function'
+      typeof introVideo.cancelVideoFrameCallback ===
+        'function'
     ) {
-      introVideo.cancelVideoFrameCallback(frameCallbackId);
+      introVideo.cancelVideoFrameCallback(
+        frameCallbackId
+      );
     }
 
     frameCallbackId = 0;
@@ -230,7 +287,8 @@
       if (
         !introVideo ||
         videoDestroyed ||
-        typeof introVideo.requestVideoFrameCallback !== 'function'
+        typeof introVideo.requestVideoFrameCallback !==
+          'function'
       ) {
         return;
       }
@@ -297,6 +355,9 @@
     videoDestroyed = true;
     soundEnabled = false;
 
+    syncSoundUI();
+    disableSoundButton();
+
     clearFrameWatch();
     destroyHls();
 
@@ -311,17 +372,25 @@
 
     introVideo.pause();
     introVideo.muted = true;
+    introVideo.defaultMuted = true;
 
     introVideo.removeAttribute('src');
     introVideo.removeAttribute('data-manifest');
 
     while (introVideo.firstChild) {
-      introVideo.removeChild(introVideo.firstChild);
+      introVideo.removeChild(
+        introVideo.firstChild
+      );
     }
 
     try {
       introVideo.load();
-    } catch (error) {}
+    } catch (error) {
+      console.error(
+        '[Václav Buchtelík] Video cleanup failed:',
+        error
+      );
+    }
 
     introVideo.remove();
     introVideo = null;
@@ -343,6 +412,11 @@
 
     if (existingScript) {
       return new Promise((resolve, reject) => {
+        if (window.Hls) {
+          resolve(window.Hls);
+          return;
+        }
+
         existingScript.addEventListener(
           'load',
           () => resolve(window.Hls),
@@ -358,7 +432,8 @@
     }
 
     return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
+      const script =
+        document.createElement('script');
 
       script.src = HLS_SCRIPT_URL;
       script.async = true;
@@ -502,6 +577,9 @@
     introVideo.muted = true;
     introVideo.defaultMuted = true;
 
+    soundEnabled = false;
+    syncSoundUI();
+
     const supportsNativeHls =
       introVideo.canPlayType(
         'application/vnd.apple.mpegurl'
@@ -512,7 +590,10 @@
       return;
     }
 
-    if (supportsNativeHls && !window.MediaSource) {
+    if (
+      supportsNativeHls &&
+      !window.MediaSource
+    ) {
       attachNativeHls();
       return;
     }
@@ -521,10 +602,10 @@
   };
 
   /* =========================================================
-     VIDEO SOUND — TAP TO TOGGLE
+     VIDEO SOUND CONTROL
      ========================================================= */
 
-  const toggleVideoSound = async () => {
+  const enableVideoSound = async () => {
     if (
       !introVideo ||
       videoDestroyed ||
@@ -533,37 +614,76 @@
       return;
     }
 
-    soundEnabled = !soundEnabled;
-    introVideo.muted = !soundEnabled;
+    introVideo.muted = false;
+    introVideo.defaultMuted = false;
 
-    if (soundEnabled) {
-      try {
-        await introVideo.play();
-      } catch (error) {
-        soundEnabled = false;
-        introVideo.muted = true;
-      }
+    const didPlay = await tryPlay(introVideo);
+
+    if (!didPlay) {
+      introVideo.muted = true;
+      introVideo.defaultMuted = true;
+
+      soundEnabled = false;
+      syncSoundUI();
+
+      return;
     }
+
+    soundEnabled = true;
+    syncSoundUI();
   };
 
-  intro.addEventListener('click', (event) => {
+  const disableVideoSound = () => {
     if (
-      event.target.closest(
-        '#introEnter, button, a'
-      )
+      !introVideo ||
+      videoDestroyed ||
+      enterActivated
     ) {
       return;
     }
 
-    toggleVideoSound();
-  });
+    soundEnabled = false;
+
+    introVideo.muted = true;
+    introVideo.defaultMuted = true;
+
+    syncSoundUI();
+  };
+
+  const toggleVideoSound = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (
+      !introVideo ||
+      videoDestroyed ||
+      enterActivated
+    ) {
+      return;
+    }
+
+    if (soundEnabled) {
+      disableVideoSound();
+      return;
+    }
+
+    await enableVideoSound();
+  };
+
+  soundButton.addEventListener(
+    'click',
+    toggleVideoSound
+  );
 
   /* =========================================================
      ARROW CYCLE
      ========================================================= */
 
   const startArrowCycle = () => {
-    if (arrowCycleStarted || enterActivated) {
+    if (
+      arrowCycleStarted ||
+      enterActivated
+    ) {
       return;
     }
 
@@ -571,7 +691,9 @@
 
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        intro.classList.add('is-arrow-cycling');
+        intro.classList.add(
+          'is-arrow-cycling'
+        );
       });
     });
   };
@@ -593,7 +715,10 @@
   };
 
   const showEnter = () => {
-    if (enterStarted || enterActivated) {
+    if (
+      enterStarted ||
+      enterActivated
+    ) {
       return;
     }
 
@@ -601,12 +726,15 @@
 
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        intro.classList.add('is-enter-visible');
-
-        enterSettledTimer = window.setTimeout(
-          settleEnter,
-          ENTER_ANIMATION_MS
+        intro.classList.add(
+          'is-enter-visible'
         );
+
+        enterSettledTimer =
+          window.setTimeout(
+            settleEnter,
+            ENTER_ANIMATION_MS
+          );
       });
     });
   };
@@ -628,7 +756,10 @@
   };
 
   const startIntro = () => {
-    if (introStarted || enterActivated) {
+    if (
+      introStarted ||
+      enterActivated
+    ) {
       return;
     }
 
@@ -636,12 +767,15 @@
 
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        intro.classList.add('is-logo-visible');
-
-        logoSettledTimer = window.setTimeout(
-          settleLogo,
-          LOGO_ANIMATION_MS
+        intro.classList.add(
+          'is-logo-visible'
         );
+
+        logoSettledTimer =
+          window.setTimeout(
+            settleLogo,
+            LOGO_ANIMATION_MS
+          );
       });
     });
   };
@@ -671,14 +805,19 @@
 
     clearAllTimers();
 
-    intro.classList.remove('is-arrow-cycling');
-    intro.classList.add('is-enter-activated');
+    intro.classList.remove(
+      'is-arrow-cycling'
+    );
+
+    intro.classList.add(
+      'is-enter-activated'
+    );
 
     destroyVideo();
 
     /*
-     * Přechod na hlavní obsah webu doplníme v dalším kroku.
-     * Video je nyní zastavené, HLS odpojené a paměť uvolněná.
+     * Přechod na hlavní obsah webu doplníme
+     * v následujícím kroku.
      */
   };
 
@@ -715,6 +854,7 @@
      START
      ========================================================= */
 
+  syncSoundUI();
   initializeVideo();
   scheduleIntro();
 
