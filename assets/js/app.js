@@ -6,6 +6,21 @@
 
 (() => {
   /* =========================================================
+     VIDEO CONFIGURATION
+     ========================================================= */
+
+  const INTRO_VIDEO = {
+    manifest:
+      'https://customer-akbn1e8h41lg80xg.cloudflarestream.com/4e230a58fb91c1b4ac5ecc851c90d14d/manifest/video.m3u8',
+
+    poster:
+      '/assets/vb-web.jpg'
+  };
+
+  const HLS_SCRIPT_URL =
+    'https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js';
+
+  /* =========================================================
      TIMING
      ========================================================= */
 
@@ -14,6 +29,7 @@
   const ENTER_START_DELAY_MS = 400;
   const ENTER_ANIMATION_MS = 1600;
   const ARROW_START_DELAY_MS = 500;
+  const VIDEO_REVEAL_SETTLE_MS = 220;
 
   /* =========================================================
      ELEMENTS
@@ -30,6 +46,19 @@
   }
 
   /* =========================================================
+     DEVICE DETECTION
+     ========================================================= */
+
+  const userAgent = navigator.userAgent || '';
+
+  const isIOS =
+    /iPhone|iPad|iPod/i.test(userAgent) ||
+    (
+      navigator.platform === 'MacIntel' &&
+      navigator.maxTouchPoints > 1
+    );
+
+  /* =========================================================
      STATE
      ========================================================= */
 
@@ -38,11 +67,22 @@
   let arrowCycleStarted = false;
   let enterActivated = false;
 
+  let introVideo = null;
+  let hlsInstance = null;
+
+  let videoReady = false;
+  let videoDestroyed = false;
+  let soundEnabled = false;
+
+  let frameCallbackId = 0;
+  let frameWatchCleanup = null;
+
   let introTimer = null;
   let logoSettledTimer = null;
   let enterStartTimer = null;
   let enterSettledTimer = null;
   let arrowStartTimer = null;
+  let videoSettledTimer = null;
 
   /* =========================================================
      TIMER HELPERS
@@ -60,13 +100,463 @@
     clearTimer(enterStartTimer);
     clearTimer(enterSettledTimer);
     clearTimer(arrowStartTimer);
+    clearTimer(videoSettledTimer);
 
     introTimer = null;
     logoSettledTimer = null;
     enterStartTimer = null;
     enterSettledTimer = null;
     arrowStartTimer = null;
+    videoSettledTimer = null;
   };
+
+  /* =========================================================
+     VIDEO HELPERS
+     ========================================================= */
+
+  const tryPlay = (video) => {
+    if (!video || videoDestroyed) {
+      return Promise.resolve();
+    }
+
+    const playPromise = video.play();
+
+    if (
+      playPromise &&
+      typeof playPromise.catch === 'function'
+    ) {
+      return playPromise.catch(() => {});
+    }
+
+    return Promise.resolve();
+  };
+
+  const createIntroVideo = () => {
+    const video = document.createElement('video');
+
+    video.className = 'intro__video';
+    video.id = 'introVideo';
+
+    video.autoplay = true;
+    video.muted = true;
+    video.defaultMuted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+
+    video.setAttribute('autoplay', '');
+    video.setAttribute('muted', '');
+    video.setAttribute('loop', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+    video.setAttribute('preload', 'auto');
+    video.setAttribute('disablepictureinpicture', '');
+    video.setAttribute('x-webkit-airplay', 'deny');
+    video.setAttribute(
+      'controlslist',
+      'nodownload noplaybackrate noremoteplayback'
+    );
+
+    video.setAttribute(
+      'aria-label',
+      'Václav Buchtelík speaking about his artistic work'
+    );
+
+    video.poster = INTRO_VIDEO.poster;
+    video.controls = false;
+    video.tabIndex = -1;
+
+    video.dataset.manifest = INTRO_VIDEO.manifest;
+
+    intro.insertBefore(video, intro.firstChild);
+
+    return video;
+  };
+
+  const clearFrameWatch = () => {
+    if (frameWatchCleanup) {
+      frameWatchCleanup();
+      frameWatchCleanup = null;
+    }
+
+    if (
+      frameCallbackId &&
+      introVideo &&
+      typeof introVideo.cancelVideoFrameCallback === 'function'
+    ) {
+      introVideo.cancelVideoFrameCallback(frameCallbackId);
+    }
+
+    frameCallbackId = 0;
+  };
+
+  const revealVideo = () => {
+    if (
+      videoReady ||
+      videoDestroyed ||
+      !introVideo
+    ) {
+      return;
+    }
+
+    if (introVideo.currentTime <= 0.05) {
+      return;
+    }
+
+    videoReady = true;
+
+    clearFrameWatch();
+
+    intro.classList.add('is-video-ready');
+
+    videoSettledTimer = window.setTimeout(() => {
+      intro.classList.add('is-video-settled');
+      videoSettledTimer = null;
+    }, VIDEO_REVEAL_SETTLE_MS);
+  };
+
+  const watchFirstRenderedFrame = () => {
+    if (!introVideo || videoDestroyed) {
+      return;
+    }
+
+    clearFrameWatch();
+
+    const handleTimeUpdate = () => {
+      revealVideo();
+    };
+
+    const handleLoadedData = () => {
+      if (
+        !introVideo ||
+        videoDestroyed ||
+        typeof introVideo.requestVideoFrameCallback !== 'function'
+      ) {
+        return;
+      }
+
+      frameCallbackId =
+        introVideo.requestVideoFrameCallback(
+          (now, metadata) => {
+            const mediaTime =
+              metadata?.mediaTime ??
+              introVideo.currentTime;
+
+            if (mediaTime > 0.05) {
+              revealVideo();
+            }
+          }
+        );
+    };
+
+    introVideo.addEventListener(
+      'timeupdate',
+      handleTimeUpdate
+    );
+
+    introVideo.addEventListener(
+      'loadeddata',
+      handleLoadedData
+    );
+
+    frameWatchCleanup = () => {
+      if (!introVideo) {
+        return;
+      }
+
+      introVideo.removeEventListener(
+        'timeupdate',
+        handleTimeUpdate
+      );
+
+      introVideo.removeEventListener(
+        'loadeddata',
+        handleLoadedData
+      );
+    };
+
+    if (introVideo.currentTime > 0.05) {
+      revealVideo();
+    }
+  };
+
+  const destroyHls = () => {
+    if (!hlsInstance) {
+      return;
+    }
+
+    hlsInstance.destroy();
+    hlsInstance = null;
+  };
+
+  const destroyVideo = () => {
+    if (videoDestroyed) {
+      return;
+    }
+
+    videoDestroyed = true;
+    soundEnabled = false;
+
+    clearFrameWatch();
+    destroyHls();
+
+    intro.classList.remove(
+      'is-video-ready',
+      'is-video-settled'
+    );
+
+    if (!introVideo) {
+      return;
+    }
+
+    introVideo.pause();
+    introVideo.muted = true;
+
+    introVideo.removeAttribute('src');
+    introVideo.removeAttribute('data-manifest');
+
+    while (introVideo.firstChild) {
+      introVideo.removeChild(introVideo.firstChild);
+    }
+
+    try {
+      introVideo.load();
+    } catch (error) {}
+
+    introVideo.remove();
+    introVideo = null;
+  };
+
+  /* =========================================================
+     HLS.JS LOADER
+     ========================================================= */
+
+  const loadHlsScript = () => {
+    if (window.Hls) {
+      return Promise.resolve(window.Hls);
+    }
+
+    const existingScript =
+      document.querySelector(
+        `script[src="${HLS_SCRIPT_URL}"]`
+      );
+
+    if (existingScript) {
+      return new Promise((resolve, reject) => {
+        existingScript.addEventListener(
+          'load',
+          () => resolve(window.Hls),
+          { once: true }
+        );
+
+        existingScript.addEventListener(
+          'error',
+          reject,
+          { once: true }
+        );
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+
+      script.src = HLS_SCRIPT_URL;
+      script.async = true;
+
+      script.addEventListener(
+        'load',
+        () => resolve(window.Hls),
+        { once: true }
+      );
+
+      script.addEventListener(
+        'error',
+        reject,
+        { once: true }
+      );
+
+      document.head.appendChild(script);
+    });
+  };
+
+  /* =========================================================
+     VIDEO ENGINE
+     ========================================================= */
+
+  const attachNativeHls = () => {
+    if (!introVideo || videoDestroyed) {
+      return;
+    }
+
+    introVideo.src = INTRO_VIDEO.manifest;
+    introVideo.load();
+
+    watchFirstRenderedFrame();
+    tryPlay(introVideo);
+  };
+
+  const attachHlsJs = async () => {
+    if (!introVideo || videoDestroyed) {
+      return;
+    }
+
+    try {
+      const Hls = await loadHlsScript();
+
+      if (
+        !Hls ||
+        !Hls.isSupported() ||
+        !introVideo ||
+        videoDestroyed
+      ) {
+        return;
+      }
+
+      hlsInstance = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        capLevelToPlayerSize: true,
+        startLevel: -1,
+        maxBufferLength: 10,
+        maxMaxBufferLength: 20,
+        backBufferLength: 0
+      });
+
+      hlsInstance.on(
+        Hls.Events.MEDIA_ATTACHED,
+        () => {
+          if (
+            !hlsInstance ||
+            !introVideo ||
+            videoDestroyed
+          ) {
+            return;
+          }
+
+          hlsInstance.loadSource(
+            INTRO_VIDEO.manifest
+          );
+        }
+      );
+
+      hlsInstance.on(
+        Hls.Events.MANIFEST_PARSED,
+        () => {
+          if (!introVideo || videoDestroyed) {
+            return;
+          }
+
+          watchFirstRenderedFrame();
+          tryPlay(introVideo);
+        }
+      );
+
+      hlsInstance.on(
+        Hls.Events.ERROR,
+        (event, data) => {
+          if (
+            !data?.fatal ||
+            !hlsInstance ||
+            videoDestroyed
+          ) {
+            return;
+          }
+
+          if (
+            data.type ===
+            Hls.ErrorTypes.NETWORK_ERROR
+          ) {
+            hlsInstance.startLoad();
+            return;
+          }
+
+          if (
+            data.type ===
+            Hls.ErrorTypes.MEDIA_ERROR
+          ) {
+            hlsInstance.recoverMediaError();
+            return;
+          }
+
+          destroyHls();
+        }
+      );
+
+      hlsInstance.attachMedia(introVideo);
+    } catch (error) {
+      if (
+        introVideo &&
+        !videoDestroyed &&
+        introVideo.canPlayType(
+          'application/vnd.apple.mpegurl'
+        )
+      ) {
+        attachNativeHls();
+      }
+    }
+  };
+
+  const initializeVideo = () => {
+    introVideo = createIntroVideo();
+
+    introVideo.muted = true;
+    introVideo.defaultMuted = true;
+
+    const supportsNativeHls =
+      introVideo.canPlayType(
+        'application/vnd.apple.mpegurl'
+      );
+
+    if (isIOS && supportsNativeHls) {
+      attachNativeHls();
+      return;
+    }
+
+    if (supportsNativeHls && !window.MediaSource) {
+      attachNativeHls();
+      return;
+    }
+
+    attachHlsJs();
+  };
+
+  /* =========================================================
+     VIDEO SOUND — TAP TO TOGGLE
+     ========================================================= */
+
+  const toggleVideoSound = async () => {
+    if (
+      !introVideo ||
+      videoDestroyed ||
+      enterActivated
+    ) {
+      return;
+    }
+
+    soundEnabled = !soundEnabled;
+    introVideo.muted = !soundEnabled;
+
+    if (soundEnabled) {
+      try {
+        await introVideo.play();
+      } catch (error) {
+        soundEnabled = false;
+        introVideo.muted = true;
+      }
+    }
+  };
+
+  intro.addEventListener('click', (event) => {
+    if (
+      event.target.closest(
+        '#introEnter, button, a'
+      )
+    ) {
+      return;
+    }
+
+    toggleVideoSound();
+  });
 
   /* =========================================================
      ARROW CYCLE
@@ -167,7 +657,12 @@
      ENTER ACTIVATION
      ========================================================= */
 
-  const activateEnter = () => {
+  const activateEnter = (event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
     if (enterActivated) {
       return;
     }
@@ -179,14 +674,18 @@
     intro.classList.remove('is-arrow-cycling');
     intro.classList.add('is-enter-activated');
 
+    destroyVideo();
+
     /*
-     * Přechod na další obsah webu doplníme v následujícím kroku.
-     * Tlačítko je nyní plně připravené pro navazující animaci
-     * nebo otevření hlavní stránky.
+     * Přechod na hlavní obsah webu doplníme v dalším kroku.
+     * Video je nyní zastavené, HLS odpojené a paměť uvolněná.
      */
   };
 
-  enter.addEventListener('click', activateEnter);
+  enter.addEventListener(
+    'click',
+    activateEnter
+  );
 
   /* =========================================================
      ASSET ERROR HANDLING
@@ -216,6 +715,7 @@
      START
      ========================================================= */
 
+  initializeVideo();
   scheduleIntro();
 
   /* =========================================================
@@ -226,6 +726,7 @@
     'pagehide',
     () => {
       clearAllTimers();
+      destroyVideo();
     },
     { once: true }
   );
