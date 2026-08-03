@@ -11,7 +11,7 @@
 
   const INTRO_VIDEO = {
     manifest:
-      'https://customer-akbn1e8h41lg80xg.cloudflarestream.com/4e230a58fb91c1b4ac5ecc851c90d14d/manifest/video.m3u8',
+      'https://customer-akbn1e8h41lg80xg.cloudflarestream.com/9879b5afd138c1beb579c980935f316d/manifest/video.m3u8',
 
     poster:
       '/assets/vb-web.jpg'
