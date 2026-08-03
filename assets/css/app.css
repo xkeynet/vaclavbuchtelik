@@ -54,11 +54,11 @@
 
   --video-reveal-duration: 180ms;
 
-  --sound-hitbox-size: 48px;
-  --sound-icon-size: 24px;
-  --sound-bottom-mobile: 18px;
-  --sound-bottom-tablet: 24px;
-  --sound-bottom-desktop: 28px;
+  --sound-hitbox-size: 60px;
+  --sound-icon-size: 36px;
+  --sound-bottom-mobile: 8px;
+  --sound-bottom-tablet: 14px;
+  --sound-bottom-desktop: 18px;
 }
 
 /* =========================================================
@@ -247,8 +247,6 @@ video {
   will-change: auto;
 }
 
-/* Skryje nativní ovládací prvky videa. */
-
 .intro__video::-webkit-media-controls {
   display: none !important;
 }
@@ -272,7 +270,6 @@ video {
 
 /* =========================================================
    DARK SMOKE OVERLAY
-   Stejný princip jako Tikboo gate.
    ========================================================= */
 
 .intro::after {
@@ -544,7 +541,7 @@ video {
 
   background: transparent;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
 
   opacity: 1;
   visibility: visible;
@@ -556,6 +553,8 @@ video {
   transform-origin: 50% 50%;
 
   z-index: 5;
+
+  overflow: visible;
 
   outline: none;
   box-shadow: none;
@@ -579,7 +578,7 @@ video {
 .intro__sound:active {
   transform:
     translate3d(-50%, 0, 0)
-    scale(0.92);
+    scale(0.94);
 }
 
 .intro__sound-icon {
@@ -587,6 +586,7 @@ video {
   height: var(--sound-icon-size);
 
   max-width: none;
+  flex: 0 0 auto;
 
   display: block;
 
@@ -595,9 +595,7 @@ video {
 
   opacity: 1;
 
-  filter:
-    drop-shadow(0 0 5px rgba(254, 44, 85, 0.32))
-    drop-shadow(0 2px 7px rgba(0, 0, 0, 0.52));
+  filter: none;
 
   transform: translate3d(0, 0, 0);
   transform-origin: 50% 50%;
@@ -608,37 +606,39 @@ video {
   pointer-events: none;
 
   transition:
-    filter 160ms linear,
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-    clip-path 160ms linear,
-    -webkit-clip-path 160ms linear;
+    transform 120ms ease,
+    filter 100ms linear,
+    clip-path 100ms linear,
+    -webkit-clip-path 100ms linear;
 
-  will-change: filter, transform, clip-path;
+  will-change: transform;
 
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
 
 /*
- * Aktivní zvuk:
- * - pravá část SVG s křížkem se ořízne,
- * - samotný reproduktor se opticky posune doprostřed,
- * - červené SVG se filtrem změní na čistě bílé.
+ * Zapnutý zvuk:
+ * - zachová se originální SVG,
+ * - pravá část s křížkem se přesně ořízne,
+ * - reproduktor se změní na bílý,
+ * - reproduktor se opticky vycentruje.
  */
 
 .intro__sound.is-sound-on .intro__sound-icon {
-  clip-path: inset(0 44% 0 0);
-  -webkit-clip-path: inset(0 44% 0 0);
+  clip-path: inset(0 46% 0 0);
+  -webkit-clip-path: inset(0 46% 0 0);
 
   filter:
     brightness(0)
-    invert(1)
-    drop-shadow(0 0 3px rgba(255, 255, 255, 0.24))
-    drop-shadow(0 2px 7px rgba(0, 0, 0, 0.52));
+    invert(1);
 
   transform:
-    translate3d(5px, 0, 0)
-    scale(1.02);
+    translate3d(
+      calc(var(--sound-icon-size) * 0.23),
+      0,
+      0
+    );
 }
 
 /* =========================================================
@@ -701,7 +701,6 @@ video {
 
 /* =========================================================
    ARROW SPIN
-   900° = dvě celé otočky + finální půlotáčka
    ========================================================= */
 
 @keyframes introArrowSpin {
@@ -765,9 +764,9 @@ video {
 
     --arrow-size-mobile: 26px;
 
-    --sound-hitbox-size: 46px;
-    --sound-icon-size: 23px;
-    --sound-bottom-mobile: 14px;
+    --sound-hitbox-size: 58px;
+    --sound-icon-size: 35px;
+    --sound-bottom-mobile: 4px;
   }
 
   .intro__gate {
@@ -794,9 +793,9 @@ video {
 
     --arrow-size-mobile: 30px;
 
-    --sound-hitbox-size: 50px;
-    --sound-icon-size: 25px;
-    --sound-bottom-mobile: 20px;
+    --sound-hitbox-size: 62px;
+    --sound-icon-size: 38px;
+    --sound-bottom-mobile: 10px;
   }
 
   .intro__arrow {
@@ -935,9 +934,9 @@ video {
 
     --arrow-size-desktop: 36px;
 
-    --sound-hitbox-size: 54px;
-    --sound-icon-size: 27px;
-    --sound-bottom-desktop: 34px;
+    --sound-hitbox-size: 68px;
+    --sound-icon-size: 41px;
+    --sound-bottom-desktop: 24px;
   }
 
   .intro__arrow {
@@ -996,19 +995,15 @@ video {
   }
 
   .intro__sound {
-    bottom:
-      calc(
-        var(--safe-bottom) +
-        8px
-      );
+    bottom: var(--safe-bottom);
 
-    width: 42px;
-    height: 42px;
+    width: 54px;
+    height: 54px;
   }
 
   .intro__sound-icon {
-    width: 22px;
-    height: 22px;
+    width: 33px;
+    height: 33px;
   }
 }
 
