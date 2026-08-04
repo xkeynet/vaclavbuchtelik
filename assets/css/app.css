@@ -54,11 +54,11 @@
 
   --video-reveal-duration: 180ms;
 
-  --sound-hitbox-size: 60px;
-  --sound-icon-size: 36px;
-  --sound-bottom-mobile: 8px;
-  --sound-bottom-tablet: 14px;
-  --sound-bottom-desktop: 18px;
+  --sound-hitbox-size: 52px;
+  --sound-icon-size: 26px;
+  --sound-bottom-mobile: 2px;
+  --sound-bottom-tablet: 8px;
+  --sound-bottom-desktop: 12px;
 }
 
 /* =========================================================
