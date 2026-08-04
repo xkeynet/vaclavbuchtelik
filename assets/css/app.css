@@ -617,14 +617,6 @@ video {
   -webkit-backface-visibility: hidden;
 }
 
-/*
- * Zapnutý zvuk:
- * - zachová se originální SVG,
- * - pravá část s křížkem se přesně ořízne,
- * - reproduktor se změní na bílý,
- * - reproduktor se opticky vycentruje.
- */
-
 .intro__sound.is-sound-on .intro__sound-icon {
   clip-path: inset(0 46% 0 0);
   -webkit-clip-path: inset(0 46% 0 0);
@@ -1048,21 +1040,14 @@ video {
 
 /* =========================================================
    MOBILE INTRO — LEFT ART COMPOSITION
-   Logo + rotated ENTER + travelling arrow
    ========================================================= */
 
 @media (max-width: 767px) {
   /*
-   * Logo je vytažené vysoko nad viewport.
-   * Kvůli transparentnímu prostoru v PNG se samotný podpis
-   * pouze vynoří shora.
+   * Logo zůstává vysoko, ale celý podpis je viditelný.
    */
   .intro__logo {
-    top:
-      calc(
-        var(--safe-top) -
-        105px
-      );
+    top: calc(var(--safe-top) + 1vh);
   }
 
   /*
@@ -1078,25 +1063,11 @@ video {
   }
 
   /*
-   * ENTER:
-   * - jeden textový řetězec otočený o -90°,
-   * - menší, ale stále tučný,
-   * - umístěný vysoko,
-   * - posunutý doprava pod levou část loga,
-   * - zachovaný příjezd zprava doleva.
+   * ENTER je jeden celek otočený o -90°.
    */
   .intro__enter {
-    top:
-      calc(
-        var(--safe-top) +
-        185px
-      );
-
-    left:
-      calc(
-        var(--safe-left) +
-        42px
-      );
+    top: calc(var(--safe-top) + 185px);
+    left: calc(var(--safe-left) + 24px);
 
     min-height: 36px;
 
@@ -1130,7 +1101,8 @@ video {
   }
 
   /*
-   * Šipka je zatím ponechaná beze změny.
+   * Šipka zůstává ve stejné výšce a velikosti.
+   * Horizontálně je zarovnaná na stejnou osu jako ENTER.
    */
   .intro__arrow {
     top:
@@ -1140,12 +1112,7 @@ video {
         18px
       );
 
-    left:
-      calc(
-        var(--safe-left) +
-        var(--intro-padding-mobile) +
-        2px
-      );
+    left: calc(var(--safe-left) + 24px);
 
     width: 34px;
     height: 34px;
