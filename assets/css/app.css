@@ -1067,7 +1067,7 @@ video {
    */
   .intro__enter {
     top: calc(var(--safe-top) + 185px);
-    left: calc(var(--safe-left) + 24px);
+    left: calc(var(--safe-left) + 30px);
 
     min-height: 36px;
 
