@@ -1052,18 +1052,21 @@ video {
    ========================================================= */
 
 @media (max-width: 767px) {
-  /* Logo skončí výrazně výš. */
+  /*
+   * Logo je vytažené vysoko nad viewport.
+   * Kvůli transparentnímu prostoru v PNG se samotný podpis
+   * pouze vynoří shora.
+   */
   .intro__logo {
     top:
       calc(
-        var(--safe-top) +
-        4vh
+        var(--safe-top) -
+        105px
       );
   }
 
   /*
-   * Gate se nově používá jako plocha přes celý displej.
-   * Jeho pozice už není počítaná z čtvercového PNG loga.
+   * Gate pokrývá celý viewport.
    */
   .intro__gate {
     inset: 0;
@@ -1076,26 +1079,28 @@ video {
 
   /*
    * ENTER:
-   * - stále je to jeden horizontální textový řetězec,
-   * - celý je otočený o -90°,
-   * - přijíždí stejně zprava doleva,
-   * - E zůstává dole, takže šipka může skončit pod E.
+   * - jeden textový řetězec otočený o -90°,
+   * - menší, ale stále tučný,
+   * - umístěný vysoko,
+   * - posunutý doprava pod levou část loga,
+   * - zachovaný příjezd zprava doleva.
    */
   .intro__enter {
     top:
       calc(
         var(--safe-top) +
-        42vh
+        185px
       );
 
     left:
       calc(
         var(--safe-left) +
-        var(--intro-padding-mobile)
+        42px
       );
 
-    min-height: 44px;
+    min-height: 36px;
 
+    font-size: 19px;
     font-weight: 700;
 
     transform:
@@ -1125,11 +1130,7 @@ video {
   }
 
   /*
-   * Šipka:
-   * - jede stále zdola nahoru,
-   * - její osa kopíruje levý okraj,
-   * - končí těsně pod spodním E,
-   * - je mírně větší.
+   * Šipka je zatím ponechaná beze změny.
    */
   .intro__arrow {
     top:
