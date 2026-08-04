@@ -705,11 +705,11 @@ video {
   }
 
   90% {
-    transform: rotate(900deg) translateZ(0);
+    transform: rotate(1080deg) translateZ(0);
   }
 
   100% {
-    transform: rotate(900deg) translateZ(0);
+    transform: rotate(1080deg) translateZ(0);
   }
 }
 
