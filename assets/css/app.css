@@ -49,7 +49,7 @@
   --enter-duration: 1600ms;
   --enter-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
 
-  --arrow-cycle-duration: 3000ms;
+  --arrow-cycle-duration: 4000ms;
   --arrow-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
 
   --video-reveal-duration: 180ms;
