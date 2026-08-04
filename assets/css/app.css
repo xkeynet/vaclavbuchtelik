@@ -787,7 +787,7 @@ video {
 
     --sound-hitbox-size: 62px;
     --sound-icon-size: 38px;
-    --sound-bottom-mobile: 10px;
+    --sound-bottom-mobile: 2px;
   }
 
   .intro__arrow {
