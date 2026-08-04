@@ -1108,8 +1108,8 @@ video {
 .intro__arrow {
   top: calc(var(--safe-top) + 148px);
 
-  left: calc(var(--safe-left) + 11px);
+  left: calc(var(--safe-left) + 13px);
 
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
