@@ -1048,7 +1048,7 @@ video {
    */
   .intro__logo {
     top: calc(var(--safe-top) + 1vh);
-    left: calc(var(--safe-left) + 12px); 
+    left: calc(var(--safe-left) + 14px); 
   }
 
   /*
