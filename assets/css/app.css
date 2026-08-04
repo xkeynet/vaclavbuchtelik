@@ -1110,6 +1110,6 @@ video {
 
   left: calc(var(--safe-left) + 11px);
 
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
 }
