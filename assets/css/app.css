@@ -10,7 +10,7 @@
   --intro-background-image: url("/assets/vb-web.jpg");
   --intro-background-position: center center;
   --intro-video-position: center center;
-  --intro-overlay: rgba(0, 0, 0, 0.55);
+  --intro-overlay: rgba(0, 0, 0, 0.40);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
