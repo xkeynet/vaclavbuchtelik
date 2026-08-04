@@ -758,7 +758,7 @@ video {
 
     --sound-hitbox-size: 58px;
     --sound-icon-size: 35px;
-    --sound-bottom-mobile: 4px;
+    --sound-bottom-mobile: -6px;
   }
 
   .intro__gate {
