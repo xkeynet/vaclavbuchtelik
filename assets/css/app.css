@@ -1106,7 +1106,7 @@ video {
  * Posunutá více vlevo a výrazně výš.
  */
 .intro__arrow {
-  top: calc(var(--safe-top) + 152px);
+  top: calc(var(--safe-top) + 148px);
 
   left: calc(var(--safe-left) + 11px);
 
