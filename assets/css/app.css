@@ -1066,7 +1066,7 @@ video {
    * ENTER je jeden celek otočený o -90°.
    */
   .intro__enter {
-    top: calc(var(--safe-top) + 185px);
+    top: calc(var(--safe-top) + 136px);
     left: calc(var(--safe-left) + 30px);
 
     min-height: 36px;
