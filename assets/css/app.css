@@ -1102,20 +1102,14 @@ video {
   }
 
   /*
-   * Šipka zůstává ve stejné výšce a velikosti.
-   * Horizontálně je zarovnaná na stejnou osu jako ENTER.
-   */
-  .intro__arrow {
-    top:
-      calc(
-        var(--safe-top) +
-        42vh +
-        18px
-      );
+ * Šipka zůstává ve stejné velikosti.
+ * Posunutá více vlevo a výrazně výš.
+ */
+.intro__arrow {
+  top: calc(var(--safe-top) + 175px);
 
-    left: calc(var(--safe-left) + 14px);
+  left: calc(var(--safe-left) + 11px);
 
-    width: 34px;
-    height: 34px;
-  }
+  width: 34px;
+  height: 34px;
 }
