@@ -503,6 +503,8 @@ video {
 
   object-fit: contain;
 
+  opacity: 0.5;
+
   transform: rotate(0deg) translateZ(0);
   transform-origin: 50% 50%;
 
