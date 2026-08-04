@@ -1048,6 +1048,7 @@ video {
    */
   .intro__logo {
     top: calc(var(--safe-top) + 1vh);
+    left: calc(var(--safe-left) + 8px); 
   }
 
   /*
@@ -1066,7 +1067,7 @@ video {
    * ENTER je jeden celek otočený o -90°.
    */
   .intro__enter {
-    top: calc(var(--safe-top) + 136px);
+    top: calc(var(--safe-top) + 128px);
     left: calc(var(--safe-left) + 30px);
 
     min-height: 36px;
