@@ -7,7 +7,10 @@
 (() => {
   const MAIN_LOGO_SRC = '/assets/vb-logo2.png';
 
+  const MAIN_LOGO_DELAY_MS = 3000;
+
   let mainCreated = false;
+  let mainLogoTimer = null;
 
   const createMain = () => {
     if (mainCreated) {
@@ -46,10 +49,31 @@
         main.classList.add('is-visible');
       });
     });
+
+    mainLogoTimer = window.setTimeout(() => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          main.classList.add('is-logo-visible');
+        });
+      });
+
+      mainLogoTimer = null;
+    }, MAIN_LOGO_DELAY_MS);
   };
 
   window.addEventListener(
     'vb:main-enter',
     createMain
+  );
+
+  window.addEventListener(
+    'pagehide',
+    () => {
+      if (mainLogoTimer !== null) {
+        window.clearTimeout(mainLogoTimer);
+        mainLogoTimer = null;
+      }
+    },
+    { once: true }
   );
 })();
