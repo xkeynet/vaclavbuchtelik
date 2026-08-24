@@ -42,7 +42,7 @@
   top:
     calc(
       env(safe-area-inset-top, 0px) -
-      72px
+      50px
     );
 
   left: 50%;
