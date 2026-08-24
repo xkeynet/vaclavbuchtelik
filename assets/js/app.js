@@ -814,10 +814,16 @@
     );
 
     destroyVideo();
- 
+
     window.dispatchEvent(
-    new CustomEvent('vb:main-enter')
-    );    
+      new CustomEvent('vb:main-enter')
+    );
+  };
+
+  enter.addEventListener(
+    'click',
+    activateEnter
+  );
 
   /* =========================================================
      ASSET ERROR HANDLING
