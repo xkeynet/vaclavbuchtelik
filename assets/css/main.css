@@ -39,7 +39,12 @@
 .main-view__logo {
   position: absolute;
 
-  top: calc(env(safe-area-inset-top, 0px) + 34px);
+  top:
+    calc(
+      env(safe-area-inset-top, 0px) -
+      72px
+    );
+
   left: 50%;
 
   width: min(54vw, 250px);
@@ -81,7 +86,7 @@
    MAIN LOGO ARRIVAL
    ========================================================= */
 
-.main-view.is-visible .main-view__logo {
+.main-view.is-logo-visible .main-view__logo {
   opacity: 1;
 
   transform:
@@ -98,6 +103,12 @@
 
 @media (min-width: 430px) and (max-width: 767px) {
   .main-view__logo {
+    top:
+      calc(
+        env(safe-area-inset-top, 0px) -
+        78px
+      );
+
     width: min(50vw, 260px);
   }
 }
@@ -108,7 +119,11 @@
 
 @media (min-width: 768px) {
   .main-view__logo {
-    top: calc(env(safe-area-inset-top, 0px) + 48px);
+    top:
+      calc(
+        env(safe-area-inset-top, 0px) -
+        60px
+      );
 
     width: min(34vw, 300px);
   }
@@ -120,7 +135,7 @@
 
 @media (min-width: 1200px) {
   .main-view__logo {
-    top: 48px;
+    top: -52px;
 
     width: min(22vw, 320px);
   }
