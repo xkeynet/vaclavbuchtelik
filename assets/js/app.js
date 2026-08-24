@@ -814,17 +814,10 @@
     );
 
     destroyVideo();
-
-    /*
-     * Přechod na hlavní obsah webu doplníme
-     * v následujícím kroku.
-     */
-  };
-
-  enter.addEventListener(
-    'click',
-    activateEnter
-  );
+ 
+    window.dispatchEvent(
+    new CustomEvent('vb:main-enter')
+    );    
 
   /* =========================================================
      ASSET ERROR HANDLING
