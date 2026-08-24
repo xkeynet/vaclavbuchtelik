@@ -106,7 +106,7 @@
     top:
       calc(
         env(safe-area-inset-top, 0px) -
-        78px
+        35px
       );
 
     width: min(50vw, 260px);
