@@ -1123,27 +1123,25 @@ video {
   filter: brightness(0) invert(1);
 }
 
-/* SOUND — o 2 px menší + čistá barva */
+/* SOUND — o 2 px menší */
 .intro__sound-icon {
   width: calc(var(--sound-icon-size) - 2px);
   height: calc(var(--sound-icon-size) - 2px);
   opacity: 1;
-}
 
-/* SOUND OFF — čistě bílá */
-.intro__sound:not(.is-sound-on) .intro__sound-icon {
-  filter: brightness(0) invert(1);
-}
-
-/* SOUND ON — čistá červená */
-.intro__sound.is-sound-on .intro__sound-icon {
+  /* MUTE — TikTok red #fe2c55 */
   filter:
     brightness(0)
     saturate(100%)
-    invert(24%)
-    sepia(99%)
-    saturate(7480%)
-    hue-rotate(342deg)
+    invert(27%)
+    sepia(98%)
+    saturate(5000%)
+    hue-rotate(337deg)
     brightness(103%)
-    contrast(103%);
+    contrast(99%);
+}
+
+/* SOUND ON — čistě bílá */
+.intro__sound.is-sound-on .intro__sound-icon {
+  filter: brightness(0) invert(1);
 }
