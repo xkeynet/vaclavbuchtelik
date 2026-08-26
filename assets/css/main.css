@@ -1041,3 +1041,18 @@
 .main-menu__content {
   transform: translateY(30px);
 }
+
+/* =========================================================
+   MENU CHEVRONS — SIZE
+   ========================================================= */
+
+.main-menu__chevron-button {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+
+.main-menu__chevron {
+  width: 24px;
+  height: 24px;
+}
