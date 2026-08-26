@@ -409,11 +409,7 @@ video {
   background: transparent;
 
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Display",
-    "SF Pro Text",
-    "Helvetica Neue",
+    "Chakra Petch",
     Arial,
     sans-serif;
 
@@ -1050,7 +1046,7 @@ video {
    */
   .intro__logo {
     top: calc(var(--safe-top) + 1vh);
-    left: calc(var(--safe-left) + 14px); 
+    left: calc(var(--safe-left) + 14px);
   }
 
   /*
@@ -1104,14 +1100,15 @@ video {
   }
 
   /*
- * Šipka zůstává ve stejné velikosti.
- * Posunutá více vlevo a výrazně výš.
- */
-.intro__arrow {
-  top: calc(var(--safe-top) + 148px);
+   * Šipka zůstává ve stejné velikosti.
+   * Posunutá více vlevo a výrazně výš.
+   */
+  .intro__arrow {
+    top: calc(var(--safe-top) + 148px);
 
-  left: calc(var(--safe-left) + 18px);
+    left: calc(var(--safe-left) + 18px);
 
-  width: 26px;
-  height: 26px;
+    width: 26px;
+    height: 26px;
+  }
 }
