@@ -678,12 +678,12 @@ video {
     transform: translate3d(0, 0, 0);
   }
 
-  78.99% {
+  98% {
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }
 
-  79% {
+  98.01% {
     opacity: 0;
     transform: translate3d(0, 0, 0);
   }
