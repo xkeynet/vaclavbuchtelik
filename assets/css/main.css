@@ -1047,12 +1047,21 @@
    ========================================================= */
 
 .main-menu__chevron-button {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
 }
 
 .main-menu__chevron {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+}
+
+/* =========================================================
+   MENU TYPOGRAPHY — MOBILE TUNING
+   ========================================================= */
+
+.main-menu__item {
+  font-size: 18px;
+  font-weight: 600;
 }
