@@ -887,6 +887,7 @@
   .main-view__header {
     padding-left: 18px;
     padding-right: 18px;
+    transform: translateY(20px); 
   }
 }
 
