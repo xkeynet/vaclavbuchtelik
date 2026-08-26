@@ -46,6 +46,9 @@
 
   let draggingSaber = false;
 
+  let saberSyncFrame = null;
+  let menuResizeObserver = null;
+
   /* =========================================================
      REFERENCES
      ========================================================= */
@@ -595,6 +598,14 @@
           .height
       );
 
+    if (
+      !Number.isFinite(
+        saberHeight
+      )
+    ) {
+      return;
+    }
+
     let y =
       (
         itemRect.top -
@@ -647,6 +658,107 @@
   };
 
   /* =========================================================
+     SABER SYNC SCHEDULER
+     ========================================================= */
+
+  const scheduleSaberSync = () => {
+    if (saberSyncFrame !== null) {
+      window.cancelAnimationFrame(
+        saberSyncFrame
+      );
+    }
+
+    saberSyncFrame =
+      window.requestAnimationFrame(
+        () => {
+          saberSyncFrame = null;
+
+          syncSaberToActive();
+        }
+      );
+  };
+
+  /* =========================================================
+     SABER LAYOUT OBSERVER
+     ========================================================= */
+
+  const bindSaberLayoutSync = () => {
+    if (!menuList) {
+      return;
+    }
+
+    const panels = Array.from(
+      menuList.querySelectorAll(
+        '.main-menu__panel'
+      )
+    );
+
+    panels.forEach(
+      (panel) => {
+        panel.addEventListener(
+          'transitionrun',
+          scheduleSaberSync
+        );
+
+        panel.addEventListener(
+          'transitionend',
+          scheduleSaberSync
+        );
+
+        panel.addEventListener(
+          'transitioncancel',
+          scheduleSaberSync
+        );
+      }
+    );
+
+    if (
+      typeof ResizeObserver ===
+      'undefined'
+    ) {
+      return;
+    }
+
+    menuResizeObserver =
+      new ResizeObserver(
+        () => {
+          scheduleSaberSync();
+        }
+      );
+
+    menuResizeObserver.observe(
+      menuList
+    );
+
+    menuItems.forEach(
+      (item) => {
+        menuResizeObserver.observe(
+          item
+        );
+      }
+    );
+
+    panels.forEach(
+      (panel) => {
+        menuResizeObserver.observe(
+          panel
+        );
+
+        const inner =
+          panel.querySelector(
+            '.main-menu__panel-inner'
+          );
+
+        if (inner) {
+          menuResizeObserver.observe(
+            inner
+          );
+        }
+      }
+    );
+  };
+
+  /* =========================================================
      ACTIVE ITEM
      ========================================================= */
 
@@ -675,7 +787,7 @@
 
     activeIndex = next;
 
-    syncSaberToActive();
+    scheduleSaberSync();
   };
 
   /* =========================================================
@@ -799,9 +911,7 @@
       openIndex = -1;
     }
 
-    window.requestAnimationFrame(
-      syncSaberToActive
-    );
+    scheduleSaberSync();
   };
 
   /* =========================================================
@@ -862,9 +972,7 @@
 
     openIndex = index;
 
-    window.requestAnimationFrame(
-      syncSaberToActive
-    );
+    scheduleSaberSync();
   };
 
   /* =========================================================
@@ -1045,6 +1153,8 @@
       'touchend',
       () => {
         draggingSaber = false;
+
+        scheduleSaberSync();
       },
       {
         passive: true
@@ -1055,6 +1165,8 @@
       'touchcancel',
       () => {
         draggingSaber = false;
+
+        scheduleSaberSync();
       },
       {
         passive: true
@@ -1118,6 +1230,8 @@
             event.pointerId
           );
         }
+
+        scheduleSaberSync();
       }
     );
 
@@ -1125,6 +1239,8 @@
       'pointercancel',
       () => {
         draggingSaber = false;
+
+        scheduleSaberSync();
       }
     );
   };
@@ -1187,7 +1303,7 @@
                 window.requestAnimationFrame(
                   () => {
                     window.requestAnimationFrame(
-                      syncSaberToActive
+                      scheduleSaberSync
                     );
                   }
                 );
@@ -1272,6 +1388,7 @@
 
     bindMenuEvents();
     bindSaberEvents();
+    bindSaberLayoutSync();
 
     /* ---------------------------------------------------------
        SHOW MAIN
@@ -1288,6 +1405,8 @@
             mainView.classList.add(
               'is-visible'
             );
+
+            scheduleSaberSync();
           }
         );
       }
@@ -1309,9 +1428,7 @@
       return;
     }
 
-    window.requestAnimationFrame(
-      syncSaberToActive
-    );
+    scheduleSaberSync();
   };
 
   window.addEventListener(
@@ -1374,6 +1491,22 @@
         );
 
         mainMenuTimer = null;
+      }
+
+      if (
+        saberSyncFrame !== null
+      ) {
+        window.cancelAnimationFrame(
+          saberSyncFrame
+        );
+
+        saberSyncFrame = null;
+      }
+
+      if (menuResizeObserver) {
+        menuResizeObserver.disconnect();
+
+        menuResizeObserver = null;
       }
 
       draggingSaber = false;
