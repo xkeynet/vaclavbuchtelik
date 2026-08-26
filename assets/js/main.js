@@ -125,9 +125,6 @@
       'main-view__header-icon main-view__header-icon--hamburger'
     );
 
-    hamburgerIcon.style.width = '30px';
-    hamburgerIcon.style.height = '30px';
-
     menuButton.appendChild(
       hamburgerIcon
     );
@@ -152,9 +149,6 @@
       SEARCH_ICON_SRC,
       'main-view__header-icon main-view__header-icon--search'
     );
-
-    searchIcon.style.width = '26px';
-    searchIcon.style.height = '26px';
 
     searchButton.appendChild(
       searchIcon
