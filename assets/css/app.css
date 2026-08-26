@@ -499,7 +499,7 @@ video {
 
   object-fit: contain;
 
-  opacity: 0.5;
+  opacity: 1;
 
   transform: rotate(0deg) translateZ(0);
   transform-origin: 50% 50%;
@@ -591,7 +591,7 @@ video {
   object-fit: contain;
   object-position: center;
 
-  opacity: 0.5;
+  opacity: 1;
 
   filter: none;
 
@@ -1111,30 +1111,4 @@ video {
     width: 26px;
     height: 26px;
   }
-}
-
-/* =========================================================
-   INTRO — FINAL ICON TUNING
-   ========================================================= */
-
-/* ŠIPKA — čistě bílá */
-.intro__arrow-icon {
-  opacity: 1;
-  filter: brightness(0) invert(1);
-}
-
-/* SOUND — o 2 px menší, zachová originální barvu SVG */
-.intro__sound-icon {
-  width: calc(var(--sound-icon-size) - 2px);
-  height: calc(var(--sound-icon-size) - 2px);
-
-  opacity: 1;
-  filter: none;
-}
-
-/* SOUND ON — čistě bílá */
-.intro__sound.is-sound-on .intro__sound-icon {
-  filter:
-    brightness(0)
-    invert(1);
 }
