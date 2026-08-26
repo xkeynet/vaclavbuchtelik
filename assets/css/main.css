@@ -1033,3 +1033,11 @@
   width: 20px;
   height: 20px;
 }
+
+/* =========================================================
+   MAIN MENU — VERTICAL POSITION
+   ========================================================= */
+
+.main-menu__content {
+  transform: translateY(30px);
+}
