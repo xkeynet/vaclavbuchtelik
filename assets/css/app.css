@@ -1123,25 +1123,18 @@ video {
   filter: brightness(0) invert(1);
 }
 
-/* SOUND — o 2 px menší */
+/* SOUND — o 2 px menší, zachová originální barvu SVG */
 .intro__sound-icon {
   width: calc(var(--sound-icon-size) - 2px);
   height: calc(var(--sound-icon-size) - 2px);
-  opacity: 1;
 
-  /* MUTE — TikTok red #fe2c55 */
-  filter:
-    brightness(0)
-    saturate(100%)
-    invert(27%)
-    sepia(98%)
-    saturate(5000%)
-    hue-rotate(337deg)
-    brightness(103%)
-    contrast(99%);
+  opacity: 1;
+  filter: none;
 }
 
 /* SOUND ON — čistě bílá */
 .intro__sound.is-sound-on .intro__sound-icon {
-  filter: brightness(0) invert(1);
+  filter:
+    brightness(0)
+    invert(1);
 }
