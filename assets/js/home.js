@@ -6,6 +6,12 @@
 
 (() => {
   /* =========================================================
+     CONFIGURATION
+     ========================================================= */
+
+  const DIVIDER_LOGO_GAP_PX = 8;
+
+  /* =========================================================
      STATE
      ========================================================= */
 
@@ -14,17 +20,14 @@
 
   let mainView = null;
   let homeView = null;
+  let divider = null;
 
   let mainObserver = null;
   let controlsObserver = null;
+  let menuStateObserver = null;
+  let layoutObserver = null;
 
-  let dividerFallbackTimer = null;
-
-  /* =========================================================
-     TIMING
-     ========================================================= */
-
-  const DIVIDER_FALLBACK_MS = 2800;
+  let syncFrame = null;
 
   /* =========================================================
      ELEMENT HELPERS
@@ -45,7 +48,128 @@
   };
 
   /* =========================================================
-     DIVIDER
+     MAIN STATE
+     ========================================================= */
+
+  const isMenuOpen = () => {
+    return Boolean(
+      mainView &&
+      mainView.classList.contains(
+        'is-menu-visible'
+      )
+    );
+  };
+
+  /* =========================================================
+     CLOSED DIVIDER POSITION
+     Pod skutečným spodkem loga.
+     ========================================================= */
+
+  const getClosedDividerY = () => {
+    if (!mainView) {
+      return 0;
+    }
+
+    const logo =
+      mainView.querySelector(
+        '.main-view__logo'
+      );
+
+    if (!logo) {
+      return 0;
+    }
+
+    const mainRect =
+      mainView.getBoundingClientRect();
+
+    const logoRect =
+      logo.getBoundingClientRect();
+
+    return (
+      logoRect.bottom -
+      mainRect.top +
+      DIVIDER_LOGO_GAP_PX
+    );
+  };
+
+  /* =========================================================
+     OPEN DIVIDER POSITION
+     Přesná pozice původního MAIN divideru pod menu.
+     ========================================================= */
+
+  const getOpenDividerY = () => {
+    if (!mainView) {
+      return 0;
+    }
+
+    const originalDivider =
+      mainView.querySelector(
+        '.main-menu__divider'
+      );
+
+    if (!originalDivider) {
+      return getClosedDividerY();
+    }
+
+    const mainRect =
+      mainView.getBoundingClientRect();
+
+    const dividerRect =
+      originalDivider.getBoundingClientRect();
+
+    return (
+      dividerRect.top -
+      mainRect.top
+    );
+  };
+
+  /* =========================================================
+     DIVIDER POSITION
+     ========================================================= */
+
+  const syncDividerPosition = () => {
+    if (
+      !mainView ||
+      !homeView ||
+      !divider
+    ) {
+      return;
+    }
+
+    const targetY =
+      isMenuOpen()
+        ? getOpenDividerY()
+        : getClosedDividerY();
+
+    homeView.style.setProperty(
+      '--home-divider-y',
+      `${targetY}px`
+    );
+  };
+
+  /* =========================================================
+     DIVIDER SYNC SCHEDULER
+     ========================================================= */
+
+  const scheduleDividerSync = () => {
+    if (syncFrame !== null) {
+      window.cancelAnimationFrame(
+        syncFrame
+      );
+    }
+
+    syncFrame =
+      window.requestAnimationFrame(
+        () => {
+          syncFrame = null;
+
+          syncDividerPosition();
+        }
+      );
+  };
+
+  /* =========================================================
+     DIVIDER REVEAL
      ========================================================= */
 
   const revealDivider = () => {
@@ -56,15 +180,9 @@
       return;
     }
 
+    syncDividerPosition();
+
     dividerVisible = true;
-
-    if (dividerFallbackTimer !== null) {
-      window.clearTimeout(
-        dividerFallbackTimer
-      );
-
-      dividerFallbackTimer = null;
-    }
 
     window.requestAnimationFrame(
       () => {
@@ -84,7 +202,8 @@
   };
 
   /* =========================================================
-     CONTROLS ARRIVAL COMPLETE
+     WAIT FOR CONTROLS ARRIVAL
+     Divider se objeví až po dojezdu hamburgeru a lupy.
      ========================================================= */
 
   const waitForControlsArrival = () => {
@@ -127,19 +246,6 @@
       'transitionend',
       handleTransitionEnd
     );
-
-    dividerFallbackTimer =
-      window.setTimeout(
-        () => {
-          control.removeEventListener(
-            'transitionend',
-            handleTransitionEnd
-          );
-
-          revealDivider();
-        },
-        DIVIDER_FALLBACK_MS
-      );
   };
 
   /* =========================================================
@@ -172,8 +278,10 @@
             return;
           }
 
-          controlsObserver.disconnect();
-          controlsObserver = null;
+          if (controlsObserver) {
+            controlsObserver.disconnect();
+            controlsObserver = null;
+          }
 
           waitForControlsArrival();
         }
@@ -186,6 +294,104 @@
         attributeFilter: [
           'class'
         ]
+      }
+    );
+  };
+
+  /* =========================================================
+     WATCH MENU STATE
+     CLOSED = divider nahoře.
+     OPEN = stejný divider pod menu.
+     ========================================================= */
+
+  const watchMenuState = () => {
+    if (!mainView) {
+      return;
+    }
+
+    menuStateObserver =
+      new MutationObserver(
+        () => {
+          scheduleDividerSync();
+        }
+      );
+
+    menuStateObserver.observe(
+      mainView,
+      {
+        attributes: true,
+        attributeFilter: [
+          'class'
+        ]
+      }
+    );
+  };
+
+  /* =========================================================
+     WATCH MENU LAYOUT
+     Panely ABOUT / MY ART / VISION / CONTACT
+     mohou měnit výšku menu.
+     ========================================================= */
+
+  const watchMenuLayout = () => {
+    if (
+      !mainView ||
+      typeof ResizeObserver ===
+        'undefined'
+    ) {
+      return;
+    }
+
+    const menuContent =
+      mainView.querySelector(
+        '.main-menu__content'
+      );
+
+    const menuList =
+      mainView.querySelector(
+        '.main-menu__list'
+      );
+
+    const logo =
+      mainView.querySelector(
+        '.main-view__logo'
+      );
+
+    layoutObserver =
+      new ResizeObserver(
+        () => {
+          scheduleDividerSync();
+        }
+      );
+
+    if (menuContent) {
+      layoutObserver.observe(
+        menuContent
+      );
+    }
+
+    if (menuList) {
+      layoutObserver.observe(
+        menuList
+      );
+    }
+
+    if (logo) {
+      layoutObserver.observe(
+        logo
+      );
+    }
+
+    const panels =
+      mainView.querySelectorAll(
+        '.main-menu__panel'
+      );
+
+    panels.forEach(
+      (panel) => {
+        layoutObserver.observe(
+          panel
+        );
       }
     );
   };
@@ -217,11 +423,10 @@
       'Václav Buchtelík home'
     );
 
-    const divider =
-      createElement(
-        'div',
-        'home-view__divider'
-      );
+    divider = createElement(
+      'div',
+      'home-view__divider'
+    );
 
     divider.setAttribute(
       'aria-hidden',
@@ -236,7 +441,19 @@
       homeView
     );
 
+    /* ---------------------------------------------------------
+       INITIAL POSITION
+       --------------------------------------------------------- */
+
+    syncDividerPosition();
+
+    /* ---------------------------------------------------------
+       WATCHERS
+       --------------------------------------------------------- */
+
     watchControls();
+    watchMenuState();
+    watchMenuLayout();
   };
 
   /* =========================================================
@@ -261,6 +478,34 @@
   };
 
   /* =========================================================
+     RESIZE
+     ========================================================= */
+
+  const handleResize = () => {
+    if (!mainView) {
+      return;
+    }
+
+    scheduleDividerSync();
+  };
+
+  window.addEventListener(
+    'resize',
+    handleResize,
+    {
+      passive: true
+    }
+  );
+
+  window.addEventListener(
+    'orientationchange',
+    handleResize,
+    {
+      passive: true
+    }
+  );
+
+  /* =========================================================
      START
      ========================================================= */
 
@@ -272,8 +517,10 @@
             return;
           }
 
-          mainObserver.disconnect();
-          mainObserver = null;
+          if (mainObserver) {
+            mainObserver.disconnect();
+            mainObserver = null;
+          }
         }
       );
 
@@ -302,14 +549,22 @@
         controlsObserver = null;
       }
 
-      if (
-        dividerFallbackTimer !== null
-      ) {
-        window.clearTimeout(
-          dividerFallbackTimer
+      if (menuStateObserver) {
+        menuStateObserver.disconnect();
+        menuStateObserver = null;
+      }
+
+      if (layoutObserver) {
+        layoutObserver.disconnect();
+        layoutObserver = null;
+      }
+
+      if (syncFrame !== null) {
+        window.cancelAnimationFrame(
+          syncFrame
         );
 
-        dividerFallbackTimer = null;
+        syncFrame = null;
       }
     },
     {
