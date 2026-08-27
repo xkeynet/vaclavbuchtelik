@@ -15,6 +15,9 @@
   const HAMBURGER_ICON_SRC =
     '/assets/icons/hamburger.svg';
 
+  const CROSS_ICON_SRC =
+    '/assets/icons/cross.svg';
+
   const SEARCH_ICON_SRC =
     '/assets/icons/search.svg';
 
@@ -28,9 +31,6 @@
   const MAIN_LOGO_DELAY_MS = 3000;
   const MAIN_LOGO_ANIMATION_MS = 2400;
 
-  const MAIN_CONTROLS_DELAY_MS = 120;
-  const MAIN_MENU_DELAY_MS = 260;
-
   /* =========================================================
      STATE
      ========================================================= */
@@ -39,11 +39,11 @@
 
   let mainLogoTimer = null;
   let mainControlsTimer = null;
-  let mainMenuTimer = null;
 
   let activeIndex = 0;
   let openIndex = -1;
 
+  let menuOpen = false;
   let draggingSaber = false;
 
   let saberSyncFrame = null;
@@ -54,6 +54,9 @@
      ========================================================= */
 
   let mainView = null;
+
+  let menuButton = null;
+  let menuIcon = null;
 
   let menuList = null;
   let menuItems = [];
@@ -98,6 +101,95 @@
   };
 
   /* =========================================================
+     MENU ICON STATE
+     ========================================================= */
+
+  const syncMenuIcon = () => {
+    if (
+      !menuButton ||
+      !menuIcon
+    ) {
+      return;
+    }
+
+    menuIcon.src =
+      menuOpen
+        ? CROSS_ICON_SRC
+        : HAMBURGER_ICON_SRC;
+
+    menuButton.setAttribute(
+      'aria-label',
+      menuOpen
+        ? 'Close menu'
+        : 'Menu'
+    );
+
+    menuButton.setAttribute(
+      'aria-expanded',
+      menuOpen
+        ? 'true'
+        : 'false'
+    );
+  };
+
+  /* =========================================================
+     MENU VISIBILITY
+     ========================================================= */
+
+  const openMainMenu = () => {
+    if (
+      !mainView ||
+      menuOpen
+    ) {
+      return;
+    }
+
+    menuOpen = true;
+
+    syncMenuIcon();
+
+    mainView.classList.add(
+      'is-menu-visible'
+    );
+
+    window.requestAnimationFrame(
+      () => {
+        window.requestAnimationFrame(
+          () => {
+            scheduleSaberSync();
+          }
+        );
+      }
+    );
+  };
+
+  const closeMainMenu = () => {
+    if (
+      !mainView ||
+      !menuOpen
+    ) {
+      return;
+    }
+
+    menuOpen = false;
+
+    mainView.classList.remove(
+      'is-menu-visible'
+    );
+
+    syncMenuIcon();
+  };
+
+  const toggleMainMenu = () => {
+    if (menuOpen) {
+      closeMainMenu();
+      return;
+    }
+
+    openMainMenu();
+  };
+
+  /* =========================================================
      MAIN HEADER
      ========================================================= */
 
@@ -108,12 +200,12 @@
     );
 
     /* ---------------------------------------------------------
-       HAMBURGER
+       HAMBURGER / CLOSE
        --------------------------------------------------------- */
 
-    const menuButton = createElement(
+    menuButton = createElement(
       'button',
-      'main-view__header-button'
+      'main-view__header-button main-view__header-button--menu'
     );
 
     menuButton.type = 'button';
@@ -123,13 +215,30 @@
       'Menu'
     );
 
-    const hamburgerIcon = createIcon(
+    menuButton.setAttribute(
+      'aria-expanded',
+      'false'
+    );
+
+    menuIcon = createIcon(
       HAMBURGER_ICON_SRC,
       'main-view__header-icon main-view__header-icon--hamburger'
     );
 
+    menuIcon.id =
+      'mainMenuControlIcon';
+
     menuButton.appendChild(
-      hamburgerIcon
+      menuIcon
+    );
+
+    menuButton.addEventListener(
+      'click',
+      (event) => {
+        event.preventDefault();
+
+        toggleMainMenu();
+      }
     );
 
     /* ---------------------------------------------------------
@@ -138,7 +247,7 @@
 
     const searchButton = createElement(
       'button',
-      'main-view__header-button'
+      'main-view__header-button main-view__header-button--search'
     );
 
     searchButton.type = 'button';
@@ -1261,6 +1370,10 @@
             () => {
               window.requestAnimationFrame(
                 () => {
+                  if (!mainView) {
+                    return;
+                  }
+
                   mainView.classList.add(
                     'is-logo-visible'
                   );
@@ -1285,33 +1398,7 @@
                 mainControlsTimer =
                   null;
               },
-              MAIN_LOGO_ANIMATION_MS +
-                MAIN_CONTROLS_DELAY_MS
-            );
-
-          mainMenuTimer =
-            window.setTimeout(
-              () => {
-                if (!mainView) {
-                  return;
-                }
-
-                mainView.classList.add(
-                  'is-menu-visible'
-                );
-
-                window.requestAnimationFrame(
-                  () => {
-                    window.requestAnimationFrame(
-                      scheduleSaberSync
-                    );
-                  }
-                );
-
-                mainMenuTimer = null;
-              },
-              MAIN_LOGO_ANIMATION_MS +
-                MAIN_MENU_DELAY_MS
+              MAIN_LOGO_ANIMATION_MS
             );
         },
         MAIN_LOGO_DELAY_MS
@@ -1389,6 +1476,8 @@
     bindMenuEvents();
     bindSaberEvents();
     bindSaberLayoutSync();
+
+    syncMenuIcon();
 
     /* ---------------------------------------------------------
        SHOW MAIN
@@ -1484,16 +1573,6 @@
       }
 
       if (
-        mainMenuTimer !== null
-      ) {
-        window.clearTimeout(
-          mainMenuTimer
-        );
-
-        mainMenuTimer = null;
-      }
-
-      if (
         saberSyncFrame !== null
       ) {
         window.cancelAnimationFrame(
@@ -1510,6 +1589,7 @@
       }
 
       draggingSaber = false;
+      menuOpen = false;
     },
     {
       once: true
