@@ -1021,8 +1021,8 @@
    ========================================================= */
 
 .main-view__header-icon--hamburger {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
 }
 
 /* =========================================================
@@ -1047,14 +1047,14 @@
    ========================================================= */
 
 .main-menu__chevron-button {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
 }
 
 .main-menu__chevron {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
 }
 
 /* =========================================================
@@ -1063,5 +1063,5 @@
 
 .main-menu__item {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
 }
