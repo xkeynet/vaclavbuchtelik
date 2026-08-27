@@ -2,11 +2,14 @@
   xmlns="http://www.w3.org/2000/svg"
   width="24"
   height="24"
-  viewBox="0 0 512 512"
+  viewBox="0 0 24 24"
   fill="none"
 >
-  <polygon
-    points="362.694834 400.853333 332.524945 431.023222 157.44 255.938278 332.524945 80.853333 362.694834 111.023222 217.796556 255.938278"
-    fill="#FFFFFF"
+  <path
+    d="M15 19L9 12L10.5 10.25M15 5L13 7.33333"
+    stroke="#FFFFFF"
+    stroke-width="1.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
   />
 </svg>
