@@ -1,1 +1,133 @@
+/* =========================================================
+   VÁCLAV BUCHTELÍK — HOME
+   ========================================================= */
 
+.home-view {
+  position: absolute;
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+  min-height: 100svh;
+
+  z-index: 9;
+
+  pointer-events: none;
+}
+
+/* =========================================================
+   HEADER DIVIDER
+   ========================================================= */
+
+.home-view__divider {
+  position: absolute;
+
+  top:
+    calc(
+      env(safe-area-inset-top, 0px) +
+      var(--main-header-height) +
+      20px
+    );
+
+  left: 16px;
+  right: 16px;
+
+  height: 1px;
+
+  background:
+    rgba(255, 255, 255, 0.18);
+
+  box-shadow:
+    0 1px 8px
+    rgba(255, 255, 255, 0.07);
+
+  opacity: 0;
+
+  transform:
+    translate3d(
+      0,
+      -14px,
+      0
+    );
+
+  transform-origin: center center;
+
+  will-change: transform, opacity;
+
+  transition:
+    transform 900ms
+      cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 480ms ease-out;
+
+  pointer-events: none;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* =========================================================
+   DIVIDER ARRIVAL
+   ========================================================= */
+
+.home-view.is-divider-visible
+.home-view__divider {
+  opacity: 1;
+
+  transform:
+    translate3d(
+      0,
+      0,
+      0
+    );
+}
+
+/* =========================================================
+   LARGE MOBILE
+   ========================================================= */
+
+@media (min-width: 430px) and (max-width: 767px) {
+  .home-view__divider {
+    left: 18px;
+    right: 18px;
+  }
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (min-width: 768px) {
+  .home-view__divider {
+    top:
+      calc(
+        env(safe-area-inset-top, 0px) +
+        var(--main-header-height)
+      );
+
+    left: 28px;
+    right: 28px;
+  }
+}
+
+/* =========================================================
+   DESKTOP
+   ========================================================= */
+
+@media (min-width: 1200px) {
+  .home-view__divider {
+    left: 42px;
+    right: 42px;
+  }
+}
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .home-view__divider {
+    transition:
+      transform 300ms ease-out,
+      opacity 200ms linear;
+  }
+}
