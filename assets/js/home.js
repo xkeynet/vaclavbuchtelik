@@ -1,8 +1,8 @@
 'use strict';
 
 /* =========================================================
-   VÁCLAV BUCHTELÍK — HOME / PHASE 2
-   PHOTO CAROUSEL + MENU VISIBILITY
+   VÁCLAV BUCHTELÍK — HOME / PHASE 3
+   PHOTO CAROUSEL + INFINITE LOOP
    ========================================================= */
 
 (() => {
@@ -138,8 +138,8 @@
      ========================================================= */
 
   const finishTransition = (current, next) => {
-    current.classList.remove('is-active', 'is-exiting');
-    next.classList.remove('is-entering');
+    current.classList.remove('is-active', 'is-exiting', 'is-entering', 'is-prepared');
+    next.classList.remove('is-entering', 'is-prepared');
     next.classList.add('is-active');
 
     transitioning = false;
@@ -155,15 +155,20 @@
     const current = slides[activeIndex];
     const next = slides[nextIndex];
 
-    next.classList.remove('is-active', 'is-exiting');
+    next.classList.remove('is-active', 'is-exiting', 'is-entering', 'is-prepared');
     next.classList.add('is-prepared');
 
     syncViewportHeight(nextIndex);
 
+    next.getBoundingClientRect();
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (!current || !next) return;
+
         next.classList.remove('is-prepared');
         next.classList.add('is-entering');
+        current.classList.remove('is-entering', 'is-prepared');
         current.classList.add('is-exiting');
 
         const onEnd = event => {
@@ -179,7 +184,12 @@
     });
   };
 
-  const showNextSlide = () => transitionTo((activeIndex + 1) % slides.length);
+  const showNextSlide = () => {
+    if (!slides.length) return;
+
+    const nextIndex = activeIndex === slides.length - 1 ? 0 : activeIndex + 1;
+    transitionTo(nextIndex);
+  };
 
   /* =========================================================
      CREATE CAROUSEL
