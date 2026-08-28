@@ -1,8 +1,8 @@
 'use strict';
 
 /* =========================================================
-   VÁCLAV BUCHTELÍK — HOME / PHASE 1
-   PHOTO CAROUSEL
+   VÁCLAV BUCHTELÍK — HOME / PHASE 2
+   PHOTO CAROUSEL + MENU VISIBILITY
    ========================================================= */
 
 (() => {
@@ -69,12 +69,14 @@
 
   const syncDivider = () => {
     if (!homeView) return;
+
     const y = isMenuOpen() ? getOpenDividerY() : getClosedDividerY();
     homeView.style.setProperty('--home-divider-y', `${y}px`);
   };
 
   const scheduleDividerSync = () => {
     if (syncFrame !== null) cancelAnimationFrame(syncFrame);
+
     syncFrame = requestAnimationFrame(() => {
       syncFrame = null;
       syncDivider();
@@ -83,7 +85,6 @@
 
   /* =========================================================
      PHOTO SIZE
-     Viewport follows the real displayed image ratio.
      ========================================================= */
 
   const getSlideHeight = index => {
@@ -116,12 +117,14 @@
 
   const stopAutoplay = () => {
     if (autoplayTimer === null) return;
+
     clearTimeout(autoplayTimer);
     autoplayTimer = null;
   };
 
   const scheduleAutoplay = () => {
     stopAutoplay();
+
     if (!carouselVisible || isMenuOpen() || document.hidden || transitioning) return;
 
     autoplayTimer = window.setTimeout(() => {
@@ -132,7 +135,6 @@
 
   /* =========================================================
      SLIDE TRANSITION
-     No cloned track. No loop jump.
      ========================================================= */
 
   const finishTransition = (current, next) => {
@@ -166,6 +168,7 @@
 
         const onEnd = event => {
           if (event.target !== next || event.propertyName !== 'transform') return;
+
           next.removeEventListener('transitionend', onEnd);
           finishTransition(current, next);
         };
@@ -239,6 +242,7 @@
 
         const onEnd = event => {
           if (event.target !== slides[0] || event.propertyName !== 'transform') return;
+
           slides[0].removeEventListener('transitionend', onEnd);
           scheduleAutoplay();
         };
@@ -257,6 +261,7 @@
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!homeView) return;
+
         homeView.classList.add('is-divider-visible');
         window.setTimeout(revealCarousel, 180);
       });
@@ -276,6 +281,7 @@
 
       const onEnd = event => {
         if (event.target !== control || event.propertyName !== 'transform') return;
+
         control.removeEventListener('transitionend', onEnd);
         revealDivider();
       };
@@ -287,6 +293,7 @@
 
     controlsObserver = new MutationObserver(() => {
       if (!mainView?.classList.contains('is-controls-visible')) return;
+
       controlsObserver.disconnect();
       controlsObserver = null;
       waitForArrival();
@@ -298,6 +305,7 @@
   const watchMenu = () => {
     menuObserver = new MutationObserver(() => {
       scheduleDividerSync();
+
       if (isMenuOpen()) stopAutoplay();
       else scheduleAutoplay();
     });
@@ -349,6 +357,7 @@
   const findMain = () => {
     mainView = document.getElementById('mainView');
     if (!mainView) return false;
+
     createHome();
     return true;
   };
@@ -373,6 +382,7 @@
   if (!findMain()) {
     mainObserver = new MutationObserver(() => {
       if (!findMain()) return;
+
       mainObserver.disconnect();
       mainObserver = null;
     });
