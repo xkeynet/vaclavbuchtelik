@@ -1,246 +1,113 @@
 'use strict';
 
 /* =========================================================
-   VÁCLAV BUCHTELÍK — HOME
+   VÁCLAV BUCHTELÍK — HOME / PHASE 1
+   PHOTO CAROUSEL
    ========================================================= */
 
 (() => {
-  /* =========================================================
-     CONFIGURATION
-     ========================================================= */
-
   const DIVIDER_LOGO_GAP_PX = 8;
   const SLIDE_INTERVAL_MS = 3000;
-  const SLIDE_TRANSITION_FALLBACK_MS = 1300;
 
-  const HOME_SLIDES = [
-    {
-      image: '/assets/home/home-001.jpg',
-      title: 'Z optimistických nálad tvořit nedokážu'
-    },
-    {
-      image: '/assets/home/home-002.png',
-      title: 'Dým 2019'
-    },
-    {
-      image: '/assets/home/home-003.png',
-      title: 'Dítě 2019'
-    },
-    {
-      image: '/assets/home/home-004.png',
-      title: 'Koukej 2019'
-    },
-    {
-      image: '/assets/home/home-005.png',
-      title: 'Trhej! 2019'
-    },
-    {
-      image: '/assets/home/home-006.png',
-      title: 'Skok do ohně 2020'
-    },
-    {
-      image: '/assets/home/home-007.png',
-      title: 'Schody do pekla 2020'
-    }
+  const HOME_IMAGES = [
+    '/assets/home/home-001.jpg',
+    '/assets/home/home-002.png',
+    '/assets/home/home-003.png',
+    '/assets/home/home-004.png',
+    '/assets/home/home-005.png',
+    '/assets/home/home-006.png',
+    '/assets/home/home-007.png'
   ];
-
-  /* =========================================================
-     STATE
-     ========================================================= */
-
-  let homeCreated = false;
-  let dividerVisible = false;
-  let carouselVisible = false;
-
-  let activeIndex = 0;
-  let transitionLocked = false;
-  let wrappingToFirst = false;
 
   let mainView = null;
   let homeView = null;
   let divider = null;
-  let carouselTrack = null;
+  let viewport = null;
+  let slides = [];
 
-  let indicatorButtons = [];
+  let activeIndex = 0;
+  let transitioning = false;
+  let carouselVisible = false;
+  let dividerVisible = false;
 
   let mainObserver = null;
   let controlsObserver = null;
-  let menuStateObserver = null;
+  let menuObserver = null;
   let layoutObserver = null;
 
   let syncFrame = null;
   let autoplayTimer = null;
-  let transitionFallbackTimer = null;
 
-  /* =========================================================
-     HELPERS
-     ========================================================= */
-
-  const createElement = (tagName, className = '') => {
-    const element = document.createElement(tagName);
-
-    if (className) {
-      element.className = className;
-    }
-
+  const createElement = (tag, className = '') => {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
     return element;
   };
 
-  const isMenuOpen = () =>
-    Boolean(
-      mainView &&
-      mainView.classList.contains('is-menu-visible')
-    );
+  const isMenuOpen = () => Boolean(mainView?.classList.contains('is-menu-visible'));
 
   /* =========================================================
-     DIVIDER POSITION
+     DIVIDER
      ========================================================= */
 
   const getClosedDividerY = () => {
-    if (!mainView) return 0;
+    const logo = mainView?.querySelector('.main-view__logo');
+    if (!mainView || !logo) return 0;
 
-    const logo =
-      mainView.querySelector('.main-view__logo');
+    const mainRect = mainView.getBoundingClientRect();
+    const logoRect = logo.getBoundingClientRect();
 
-    if (!logo) return 0;
-
-    const mainRect =
-      mainView.getBoundingClientRect();
-
-    const logoRect =
-      logo.getBoundingClientRect();
-
-    return (
-      logoRect.bottom -
-      mainRect.top +
-      DIVIDER_LOGO_GAP_PX
-    );
+    return logoRect.bottom - mainRect.top + DIVIDER_LOGO_GAP_PX;
   };
 
   const getOpenDividerY = () => {
-    if (!mainView) return 0;
+    const originalDivider = mainView?.querySelector('.main-menu__divider');
+    if (!mainView || !originalDivider) return getClosedDividerY();
 
-    const originalDivider =
-      mainView.querySelector('.main-menu__divider');
-
-    if (!originalDivider) {
-      return getClosedDividerY();
-    }
-
-    const mainRect =
-      mainView.getBoundingClientRect();
-
-    const dividerRect =
-      originalDivider.getBoundingClientRect();
-
-    return dividerRect.top - mainRect.top;
+    return originalDivider.getBoundingClientRect().top - mainView.getBoundingClientRect().top;
   };
 
-  const syncDividerPosition = () => {
-    if (!mainView || !homeView || !divider) {
-      return;
-    }
-
-    const targetY =
-      isMenuOpen()
-        ? getOpenDividerY()
-        : getClosedDividerY();
-
-    homeView.style.setProperty(
-      '--home-divider-y',
-      `${targetY}px`
-    );
+  const syncDivider = () => {
+    if (!homeView) return;
+    const y = isMenuOpen() ? getOpenDividerY() : getClosedDividerY();
+    homeView.style.setProperty('--home-divider-y', `${y}px`);
   };
 
   const scheduleDividerSync = () => {
-    if (syncFrame !== null) {
-      cancelAnimationFrame(syncFrame);
-    }
-
+    if (syncFrame !== null) cancelAnimationFrame(syncFrame);
     syncFrame = requestAnimationFrame(() => {
       syncFrame = null;
-      syncDividerPosition();
+      syncDivider();
     });
   };
 
   /* =========================================================
-     INDICATORS
+     PHOTO SIZE
+     Viewport follows the real displayed image ratio.
      ========================================================= */
 
-  const updateIndicators = () => {
-    indicatorButtons.forEach((button, index) => {
-      const active =
-        index === activeIndex;
+  const getSlideHeight = index => {
+    if (!viewport || !slides[index]) return 0;
 
-      button.classList.toggle(
-        'is-active',
-        active
-      );
+    const image = slides[index].querySelector('.home-carousel__image');
+    if (!image?.naturalWidth || !image?.naturalHeight) return 0;
 
-      button.setAttribute(
-        'aria-current',
-        active ? 'true' : 'false'
-      );
-    });
+    return viewport.clientWidth * (image.naturalHeight / image.naturalWidth);
   };
 
-  /* =========================================================
-     TRACK
-     ========================================================= */
+  const syncViewportHeight = (index, immediate = false) => {
+    if (!viewport) return;
 
-  const setTrackIndex = index => {
-    if (!carouselTrack) return;
+    const height = getSlideHeight(index);
+    if (!height) return;
 
-    carouselTrack.style.setProperty(
-      '--home-track-index',
-      String(index)
-    );
-  };
+    viewport.classList.toggle('is-height-jump', immediate);
+    viewport.style.height = `${height}px`;
 
-  const clearTransitionFallback = () => {
-    if (transitionFallbackTimer === null) {
-      return;
+    if (immediate) {
+      viewport.getBoundingClientRect();
+      requestAnimationFrame(() => viewport?.classList.remove('is-height-jump'));
     }
-
-    clearTimeout(transitionFallbackTimer);
-    transitionFallbackTimer = null;
-  };
-
-  const resetLoopPosition = () => {
-    if (!carouselTrack) return;
-
-    carouselTrack.classList.add('is-jump');
-    setTrackIndex(0);
-
-    carouselTrack.getBoundingClientRect();
-
-    requestAnimationFrame(() => {
-      if (!carouselTrack) return;
-
-      carouselTrack.classList.remove('is-jump');
-    });
-  };
-
-  const finishSlideTransition = () => {
-    clearTransitionFallback();
-
-    if (wrappingToFirst) {
-      resetLoopPosition();
-      wrappingToFirst = false;
-    }
-
-    transitionLocked = false;
-  };
-
-  const handleTrackTransitionEnd = event => {
-    if (
-      event.target !== carouselTrack ||
-      event.propertyName !== 'transform'
-    ) {
-      return;
-    }
-
-    finishSlideTransition();
   };
 
   /* =========================================================
@@ -249,349 +116,105 @@
 
   const stopAutoplay = () => {
     if (autoplayTimer === null) return;
-
-    clearInterval(autoplayTimer);
+    clearTimeout(autoplayTimer);
     autoplayTimer = null;
   };
 
-  const startAutoplay = () => {
+  const scheduleAutoplay = () => {
     stopAutoplay();
+    if (!carouselVisible || isMenuOpen() || document.hidden || transitioning) return;
 
-    if (
-      !carouselVisible ||
-      isMenuOpen() ||
-      document.hidden
-    ) {
-      return;
-    }
-
-    autoplayTimer = window.setInterval(() => {
-      if (transitionLocked) return;
-
-      const nextIndex =
-        (activeIndex + 1) %
-        HOME_SLIDES.length;
-
-      goToSlide(nextIndex);
+    autoplayTimer = window.setTimeout(() => {
+      autoplayTimer = null;
+      showNextSlide();
     }, SLIDE_INTERVAL_MS);
   };
 
   /* =========================================================
-     GO TO SLIDE
+     SLIDE TRANSITION
+     No cloned track. No loop jump.
      ========================================================= */
 
-  const goToSlide = (nextIndex, manual = false) => {
-    if (
-      !carouselTrack ||
-      transitionLocked ||
-      nextIndex < 0 ||
-      nextIndex >= HOME_SLIDES.length
-    ) {
-      return;
-    }
+  const finishTransition = (current, next) => {
+    current.classList.remove('is-active', 'is-exiting');
+    next.classList.remove('is-entering');
+    next.classList.add('is-active');
 
-    if (nextIndex === activeIndex) {
-      if (manual) startAutoplay();
-      return;
-    }
-
-    transitionLocked = true;
-
-    wrappingToFirst =
-      activeIndex === HOME_SLIDES.length - 1 &&
-      nextIndex === 0;
-
-    activeIndex = nextIndex;
-
-    setTrackIndex(
-      wrappingToFirst
-        ? HOME_SLIDES.length
-        : nextIndex
-    );
-
-    updateIndicators();
-
-    clearTransitionFallback();
-
-    transitionFallbackTimer =
-      window.setTimeout(
-        finishSlideTransition,
-        SLIDE_TRANSITION_FALLBACK_MS
-      );
-
-    if (manual) {
-      startAutoplay();
-    }
+    transitioning = false;
+    scheduleAutoplay();
   };
 
-  /* =========================================================
-     SLIDE
-     ========================================================= */
+  const transitionTo = nextIndex => {
+    if (transitioning || nextIndex === activeIndex || !slides[nextIndex]) return;
 
-  const createSlide = (slide, duplicate = false) => {
-    const article =
-      createElement(
-        'article',
-        'home-carousel__slide'
-      );
+    stopAutoplay();
+    transitioning = true;
 
-    if (duplicate) {
-      article.setAttribute(
-        'aria-hidden',
-        'true'
-      );
-    }
+    const current = slides[activeIndex];
+    const next = slides[nextIndex];
 
-    const media =
-      createElement(
-        'div',
-        'home-carousel__media'
-      );
+    next.classList.remove('is-active', 'is-exiting');
+    next.classList.add('is-prepared');
 
-    const image =
-      document.createElement('img');
+    syncViewportHeight(nextIndex);
 
-    image.className =
-      'home-carousel__image';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        next.classList.remove('is-prepared');
+        next.classList.add('is-entering');
+        current.classList.add('is-exiting');
 
-    image.src = slide.image;
-    image.alt = slide.title;
-    image.decoding = 'async';
-    image.draggable = false;
+        const onEnd = event => {
+          if (event.target !== next || event.propertyName !== 'transform') return;
+          next.removeEventListener('transitionend', onEnd);
+          finishTransition(current, next);
+        };
 
-    if (
-      slide === HOME_SLIDES[0] &&
-      !duplicate
-    ) {
-      image.fetchPriority = 'high';
-    }
-
-    media.appendChild(image);
-
-    /* ---------------------------------------------------------
-       CAPTION
-       --------------------------------------------------------- */
-
-    const caption =
-      createElement(
-        'div',
-        'home-carousel__caption'
-      );
-
-    const captionInner =
-      createElement(
-        'div',
-        'home-carousel__caption-inner'
-      );
-
-    const logo =
-      document.createElement('img');
-
-    logo.className =
-      'home-carousel__caption-logo';
-
-    logo.src =
-      '/assets/vb-logo.png';
-
-    logo.alt =
-      'Václav Buchtelík';
-
-    logo.decoding = 'async';
-    logo.draggable = false;
-
-    const separator =
-      createElement(
-        'span',
-        'home-carousel__caption-separator'
-      );
-
-    separator.setAttribute(
-      'aria-hidden',
-      'true'
-    );
-
-    const title =
-      createElement(
-        'span',
-        'home-carousel__caption-title'
-      );
-
-    title.textContent =
-      slide.title;
-
-    captionInner.append(
-      logo,
-      separator,
-      title
-    );
-
-    caption.appendChild(
-      captionInner
-    );
-
-    article.append(
-      media,
-      caption
-    );
-
-    return article;
+        next.addEventListener('transitionend', onEnd);
+        activeIndex = nextIndex;
+      });
+    });
   };
 
-  /* =========================================================
-     INDICATOR NAVIGATION
-     ========================================================= */
-
-  const createIndicators = () => {
-    const indicators =
-      createElement(
-        'div',
-        'home-carousel__indicators'
-      );
-
-    indicators.setAttribute(
-      'aria-label',
-      'Artwork carousel navigation'
-    );
-
-    indicatorButtons =
-      HOME_SLIDES.map(
-        (slide, index) => {
-          const button =
-            createElement(
-              'button',
-              'home-carousel__indicator'
-            );
-
-          button.type = 'button';
-
-          button.setAttribute(
-            'aria-label',
-            `Show artwork ${index + 1}: ${slide.title}`
-          );
-
-          const line =
-            document.createElement('img');
-
-          line.className =
-            'home-carousel__indicator-line';
-
-          line.src =
-            '/assets/icons/line.svg';
-
-          line.alt = '';
-          line.draggable = false;
-
-          button.appendChild(line);
-
-          button.addEventListener(
-            'click',
-            event => {
-              event.preventDefault();
-
-              goToSlide(
-                index,
-                true
-              );
-            }
-          );
-
-          indicators.appendChild(
-            button
-          );
-
-          return button;
-        }
-      );
-
-    updateIndicators();
-
-    return indicators;
-  };
+  const showNextSlide = () => transitionTo((activeIndex + 1) % slides.length);
 
   /* =========================================================
-     CAROUSEL
+     CREATE CAROUSEL
      ========================================================= */
 
   const createCarousel = () => {
-    const content =
-      createElement(
-        'div',
-        'home-view__content'
-      );
+    const content = createElement('div', 'home-view__content');
+    const carousel = createElement('section', 'home-carousel');
+    viewport = createElement('div', 'home-carousel__viewport');
 
-    const carousel =
-      createElement(
-        'section',
-        'home-carousel'
-      );
+    carousel.setAttribute('aria-label', 'Selected works by Václav Buchtelík');
 
-    carousel.setAttribute(
-      'aria-label',
-      'Selected works by Václav Buchtelík'
-    );
+    slides = HOME_IMAGES.map((src, index) => {
+      const slide = createElement('div', 'home-carousel__slide');
+      const image = document.createElement('img');
 
-    const viewport =
-      createElement(
-        'div',
-        'home-carousel__viewport'
-      );
+      image.className = 'home-carousel__image';
+      image.src = src;
+      image.alt = `Václav Buchtelík artwork ${index + 1}`;
+      image.decoding = 'async';
+      image.draggable = false;
 
-    carouselTrack =
-      createElement(
-        'div',
-        'home-carousel__track'
-      );
+      if (index === 0) image.fetchPriority = 'high';
 
-    carouselTrack.style.setProperty(
-      '--home-track-index',
-      '0'
-    );
+      image.addEventListener('load', () => {
+        if (index === activeIndex) syncViewportHeight(index, !carouselVisible);
+      });
 
-    carouselTrack.addEventListener(
-      'transitionend',
-      handleTrackTransitionEnd
-    );
+      slide.appendChild(image);
+      viewport.appendChild(slide);
 
-    HOME_SLIDES.forEach(slide => {
-      carouselTrack.appendChild(
-        createSlide(slide)
-      );
+      return slide;
     });
 
-    carouselTrack.appendChild(
-      createSlide(
-        HOME_SLIDES[0],
-        true
-      )
-    );
+    slides[0].classList.add('is-prepared');
 
-    viewport.appendChild(
-      carouselTrack
-    );
-
-    const indicators =
-      createIndicators();
-
-    const sectionDivider =
-      createElement(
-        'div',
-        'home-carousel__section-divider'
-      );
-
-    sectionDivider.setAttribute(
-      'aria-hidden',
-      'true'
-    );
-
-    carousel.append(
-      viewport,
-      indicators,
-      sectionDivider
-    );
-
-    content.appendChild(
-      carousel
-    );
+    carousel.appendChild(viewport);
+    content.appendChild(carousel);
 
     return content;
   };
@@ -601,203 +224,103 @@
      ========================================================= */
 
   const revealCarousel = () => {
-    if (
-      !homeView ||
-      carouselVisible
-    ) {
-      return;
-    }
+    if (!homeView || carouselVisible) return;
 
     carouselVisible = true;
+    syncViewportHeight(0, true);
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (!homeView) return;
+        if (!homeView || !slides[0]) return;
 
-        homeView.classList.add(
-          'is-carousel-visible'
-        );
+        homeView.classList.add('is-carousel-visible');
+        slides[0].classList.remove('is-prepared');
+        slides[0].classList.add('is-active');
 
-        startAutoplay();
+        const onEnd = event => {
+          if (event.target !== slides[0] || event.propertyName !== 'transform') return;
+          slides[0].removeEventListener('transitionend', onEnd);
+          scheduleAutoplay();
+        };
+
+        slides[0].addEventListener('transitionend', onEnd);
       });
     });
   };
 
   const revealDivider = () => {
-    if (
-      !homeView ||
-      dividerVisible
-    ) {
-      return;
-    }
+    if (!homeView || dividerVisible) return;
 
-    syncDividerPosition();
+    syncDivider();
     dividerVisible = true;
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!homeView) return;
-
-        homeView.classList.add(
-          'is-divider-visible'
-        );
-
-        window.setTimeout(
-          revealCarousel,
-          180
-        );
+        homeView.classList.add('is-divider-visible');
+        window.setTimeout(revealCarousel, 180);
       });
     });
   };
 
   /* =========================================================
-     CONTROLS ARRIVAL
+     MAIN WATCHERS
      ========================================================= */
-
-  const waitForControlsArrival = () => {
-    if (
-      !mainView ||
-      dividerVisible
-    ) {
-      return;
-    }
-
-    const control =
-      mainView.querySelector(
-        '.main-view__header-button'
-      );
-
-    if (!control) {
-      revealDivider();
-      return;
-    }
-
-    const handleTransitionEnd = event => {
-      if (
-        event.target !== control ||
-        event.propertyName !== 'transform'
-      ) {
-        return;
-      }
-
-      control.removeEventListener(
-        'transitionend',
-        handleTransitionEnd
-      );
-
-      revealDivider();
-    };
-
-    control.addEventListener(
-      'transitionend',
-      handleTransitionEnd
-    );
-  };
 
   const watchControls = () => {
     if (!mainView) return;
 
-    if (
-      mainView.classList.contains(
-        'is-controls-visible'
-      )
-    ) {
-      waitForControlsArrival();
-      return;
-    }
+    const waitForArrival = () => {
+      const control = mainView.querySelector('.main-view__header-button');
+      if (!control) return revealDivider();
 
-    controlsObserver =
-      new MutationObserver(() => {
-        if (
-          !mainView ||
-          !mainView.classList.contains(
-            'is-controls-visible'
-          )
-        ) {
-          return;
-        }
+      const onEnd = event => {
+        if (event.target !== control || event.propertyName !== 'transform') return;
+        control.removeEventListener('transitionend', onEnd);
+        revealDivider();
+      };
 
-        if (controlsObserver) {
-          controlsObserver.disconnect();
-          controlsObserver = null;
-        }
+      control.addEventListener('transitionend', onEnd);
+    };
 
-        waitForControlsArrival();
-      });
+    if (mainView.classList.contains('is-controls-visible')) return waitForArrival();
 
-    controlsObserver.observe(
-      mainView,
-      {
-        attributes: true,
-        attributeFilter: ['class']
-      }
-    );
+    controlsObserver = new MutationObserver(() => {
+      if (!mainView?.classList.contains('is-controls-visible')) return;
+      controlsObserver.disconnect();
+      controlsObserver = null;
+      waitForArrival();
+    });
+
+    controlsObserver.observe(mainView, { attributes: true, attributeFilter: ['class'] });
   };
 
-  /* =========================================================
-     MENU STATE
-     ========================================================= */
+  const watchMenu = () => {
+    menuObserver = new MutationObserver(() => {
+      scheduleDividerSync();
+      if (isMenuOpen()) stopAutoplay();
+      else scheduleAutoplay();
+    });
 
-  const watchMenuState = () => {
-    if (!mainView) return;
-
-    menuStateObserver =
-      new MutationObserver(() => {
-        scheduleDividerSync();
-
-        if (isMenuOpen()) {
-          stopAutoplay();
-        } else {
-          startAutoplay();
-        }
-      });
-
-    menuStateObserver.observe(
-      mainView,
-      {
-        attributes: true,
-        attributeFilter: ['class']
-      }
-    );
+    menuObserver.observe(mainView, { attributes: true, attributeFilter: ['class'] });
   };
 
-  /* =========================================================
-     MENU LAYOUT
-     ========================================================= */
+  const watchLayout = () => {
+    if (typeof ResizeObserver === 'undefined') return;
 
-  const watchMenuLayout = () => {
-    if (
-      !mainView ||
-      typeof ResizeObserver === 'undefined'
-    ) {
-      return;
-    }
-
-    layoutObserver =
-      new ResizeObserver(
-        scheduleDividerSync
-      );
+    layoutObserver = new ResizeObserver(() => {
+      scheduleDividerSync();
+      syncViewportHeight(activeIndex);
+    });
 
     [
-      mainView.querySelector(
-        '.main-menu__content'
-      ),
-      mainView.querySelector(
-        '.main-menu__list'
-      ),
-      mainView.querySelector(
-        '.main-view__logo'
-      ),
-      ...mainView.querySelectorAll(
-        '.main-menu__panel'
-      )
-    ]
-      .filter(Boolean)
-      .forEach(element => {
-        layoutObserver.observe(
-          element
-        );
-      });
+      mainView.querySelector('.main-menu__content'),
+      mainView.querySelector('.main-menu__list'),
+      mainView.querySelector('.main-view__logo'),
+      ...mainView.querySelectorAll('.main-menu__panel')
+    ].filter(Boolean).forEach(element => layoutObserver.observe(element));
+
+    if (viewport) layoutObserver.observe(viewport);
   };
 
   /* =========================================================
@@ -805,72 +328,28 @@
      ========================================================= */
 
   const createHome = () => {
-    if (
-      homeCreated ||
-      !mainView
-    ) {
-      return;
-    }
+    if (!mainView || document.getElementById('homeView')) return;
 
-    homeCreated = true;
+    homeView = createElement('section', 'home-view');
+    homeView.id = 'homeView';
+    homeView.setAttribute('aria-label', 'Václav Buchtelík home');
 
-    homeView =
-      createElement(
-        'section',
-        'home-view'
-      );
+    divider = createElement('div', 'home-view__divider');
+    divider.setAttribute('aria-hidden', 'true');
 
-    homeView.id =
-      'homeView';
+    homeView.append(divider, createCarousel());
+    mainView.appendChild(homeView);
 
-    homeView.setAttribute(
-      'aria-label',
-      'Václav Buchtelík home'
-    );
-
-    divider =
-      createElement(
-        'div',
-        'home-view__divider'
-      );
-
-    divider.setAttribute(
-      'aria-hidden',
-      'true'
-    );
-
-    homeView.append(
-      divider,
-      createCarousel()
-    );
-
-    mainView.appendChild(
-      homeView
-    );
-
-    syncDividerPosition();
+    syncDivider();
     watchControls();
-    watchMenuState();
-    watchMenuLayout();
+    watchMenu();
+    watchLayout();
   };
 
-  /* =========================================================
-     FIND MAIN
-     ========================================================= */
-
   const findMain = () => {
-    const existingMain =
-      document.getElementById(
-        'mainView'
-      );
-
-    if (!existingMain) {
-      return false;
-    }
-
-    mainView = existingMain;
+    mainView = document.getElementById('mainView');
+    if (!mainView) return false;
     createHome();
-
     return true;
   };
 
@@ -879,106 +358,40 @@
      ========================================================= */
 
   const handleResize = () => {
-    if (!mainView) return;
-
     scheduleDividerSync();
+    syncViewportHeight(activeIndex);
   };
 
-  window.addEventListener(
-    'resize',
-    handleResize,
-    { passive: true }
-  );
+  window.addEventListener('resize', handleResize, { passive: true });
+  window.addEventListener('orientationchange', handleResize, { passive: true });
 
-  window.addEventListener(
-    'orientationchange',
-    handleResize,
-    { passive: true }
-  );
-
-  document.addEventListener(
-    'visibilitychange',
-    () => {
-      if (document.hidden) {
-        stopAutoplay();
-      } else {
-        startAutoplay();
-      }
-    }
-  );
-
-  /* =========================================================
-     START
-     ========================================================= */
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopAutoplay();
+    else scheduleAutoplay();
+  });
 
   if (!findMain()) {
-    mainObserver =
-      new MutationObserver(() => {
-        if (!findMain()) return;
+    mainObserver = new MutationObserver(() => {
+      if (!findMain()) return;
+      mainObserver.disconnect();
+      mainObserver = null;
+    });
 
-        if (mainObserver) {
-          mainObserver.disconnect();
-          mainObserver = null;
-        }
-      });
-
-    mainObserver.observe(
-      document.body,
-      {
-        childList: true
-      }
-    );
+    mainObserver.observe(document.body, { childList: true });
   }
 
   /* =========================================================
      CLEANUP
      ========================================================= */
 
-  window.addEventListener(
-    'pagehide',
-    () => {
-      if (mainObserver) {
-        mainObserver.disconnect();
-      }
+  window.addEventListener('pagehide', () => {
+    mainObserver?.disconnect();
+    controlsObserver?.disconnect();
+    menuObserver?.disconnect();
+    layoutObserver?.disconnect();
 
-      if (controlsObserver) {
-        controlsObserver.disconnect();
-      }
+    stopAutoplay();
 
-      if (menuStateObserver) {
-        menuStateObserver.disconnect();
-      }
-
-      if (layoutObserver) {
-        layoutObserver.disconnect();
-      }
-
-      if (
-        carouselTrack
-      ) {
-        carouselTrack.removeEventListener(
-          'transitionend',
-          handleTrackTransitionEnd
-        );
-      }
-
-      stopAutoplay();
-      clearTransitionFallback();
-
-      if (syncFrame !== null) {
-        cancelAnimationFrame(
-          syncFrame
-        );
-      }
-
-      mainObserver = null;
-      controlsObserver = null;
-      menuStateObserver = null;
-      layoutObserver = null;
-      syncFrame = null;
-    },
-    {
-      once: true
-    }
-  );
+    if (syncFrame !== null) cancelAnimationFrame(syncFrame);
+  }, { once: true });
 })();
