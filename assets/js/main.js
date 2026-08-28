@@ -25,6 +25,19 @@
     '/assets/icons/arrow-down.svg';
 
   /* =========================================================
+     MENU ICON PRELOAD
+     ========================================================= */
+
+  const crossIconPreload =
+    new Image();
+
+  crossIconPreload.decoding =
+    'sync';
+
+  crossIconPreload.src =
+    CROSS_ICON_SRC;
+
+  /* =========================================================
      TIMING
      ========================================================= */
 
