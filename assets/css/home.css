@@ -5,6 +5,7 @@
 .main-view.is-visible {
   overflow-x: hidden;
   overflow-y: auto;
+
   -webkit-overflow-scrolling: touch;
 }
 
@@ -12,16 +13,23 @@
   overflow: hidden;
 }
 
-.main-view:not(.is-menu-visible) .main-menu {
+.main-view:not(.is-menu-visible)
+.main-menu {
   pointer-events: none;
 }
 
-.main-view.is-menu-visible .main-menu {
+.main-view.is-menu-visible
+.main-menu {
   pointer-events: auto;
 }
 
+/* =========================================================
+   HOME VIEW
+   ========================================================= */
+
 .home-view {
   position: absolute;
+
   top: 0;
   left: 0;
 
@@ -29,6 +37,7 @@
   min-height: 100svh;
 
   z-index: 9;
+
   pointer-events: none;
 }
 
@@ -46,6 +55,7 @@
 
 .home-view__divider {
   position: absolute;
+
   top: 0;
 
   left: var(--menu-left);
@@ -53,7 +63,8 @@
 
   height: 1px;
 
-  background: rgba(255, 255, 255, 0.18);
+  background:
+    rgba(255, 255, 255, 0.18);
 
   box-shadow:
     0 1px 8px
@@ -69,7 +80,10 @@
     );
 
   transform-origin: center;
-  will-change: transform, opacity;
+
+  will-change:
+    transform,
+    opacity;
 
   transition:
     transform 900ms
@@ -128,23 +142,44 @@
       cubic-bezier(0.16, 1, 0.3, 1),
     opacity 300ms linear;
 
-  will-change: transform, opacity;
+  will-change:
+    transform,
+    opacity;
 }
 
 .home-view.is-carousel-visible
 .home-carousel {
   opacity: 1;
-  transform: translate3d(0, 0, 0);
+
+  transform:
+    translate3d(
+      0,
+      0,
+      0
+    );
 }
 
 /* =========================================================
-   VIEWPORT + TRACK
+   CAROUSEL VIEWPORT
    ========================================================= */
 
 .home-carousel__viewport {
+  position: relative;
+
   width: 100%;
+
   overflow: hidden;
+
+  contain:
+    layout
+    paint;
+
+  isolation: isolate;
 }
+
+/* =========================================================
+   CAROUSEL TRACK
+   ========================================================= */
 
 .home-carousel__track {
   display: flex;
@@ -166,6 +201,9 @@
       cubic-bezier(0.16, 1, 0.3, 1);
 
   will-change: transform;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .home-carousel__track.is-jump {
@@ -177,9 +215,21 @@
    ========================================================= */
 
 .home-carousel__slide {
-  flex: 0 0 100%;
+  flex:
+    0 0
+    100%;
+
   width: 100%;
-  min-width: 0;
+  min-width: 100%;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  overflow: hidden;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* =========================================================
@@ -188,16 +238,28 @@
 
 .home-carousel__media {
   width: 100%;
-  height: clamp(330px, 54svh, 520px);
+  height:
+    clamp(
+      370px,
+      59svh,
+      570px
+    );
 
   display: flex;
+
   align-items: center;
   justify-content: center;
 
   overflow: hidden;
 
   background: #000000;
+
+  flex: 0 0 auto;
 }
+
+/* =========================================================
+   ARTWORK IMAGE
+   ========================================================= */
 
 .home-carousel__image {
   display: block;
@@ -205,14 +267,19 @@
   width: 100%;
   height: 100%;
 
+  margin: 0 auto;
+
   object-fit: contain;
-  object-position: center;
+  object-position: center center;
 
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
 
   pointer-events: none;
+
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* =========================================================
@@ -221,43 +288,116 @@
 
 .home-carousel__caption {
   width: 100%;
-  min-height: 76px;
 
-  display: grid;
-  grid-template-columns:
-    auto
-    1px
-    minmax(0, 1fr);
+  min-height: 72px;
+
+  display: flex;
 
   align-items: center;
+  justify-content: center;
 
-  column-gap: 10px;
+  padding:
+    14px
+    0
+    6px;
 
-  padding: 14px 2px 8px;
+  overflow: hidden;
 }
+
+/* =========================================================
+   CAPTION INNER
+   Celý blok je centrovaný jako jeden celek.
+   ========================================================= */
+
+.home-carousel__caption-inner {
+  width: fit-content;
+  max-width: 100%;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 10px;
+
+  margin:
+    0
+    auto;
+
+  padding:
+    0
+    4px;
+}
+
+/* =========================================================
+   CAPTION LOGO
+   Velikost ponechána.
+   ========================================================= */
 
 .home-carousel__caption-logo {
   display: block;
 
-  width: clamp(108px, 32vw, 150px);
+  width:
+    clamp(
+      108px,
+      32vw,
+      150px
+    );
+
   height: auto;
+
+  flex:
+    0 0
+    auto;
 
   object-fit: contain;
 
   pointer-events: none;
 }
 
+/* =========================================================
+   CAPTION SABER
+   Stejný vizuální princip jako aktivní saber v menu.
+   ========================================================= */
+
 .home-carousel__caption-separator {
-  width: 1px;
-  height: 30px;
+  width:
+    var(
+      --saber-width,
+      4px
+    );
+
+  height:
+    var(
+      --saber-height,
+      26px
+    );
+
+  flex:
+    0 0
+    var(
+      --saber-width,
+      4px
+    );
 
   display: block;
 
-  background: rgba(255, 255, 255, 0.85);
+  background:
+    var(
+      --main-foreground,
+      #ffffff
+    );
+
+  border-radius: 2px;
 }
 
+/* =========================================================
+   CAPTION TITLE
+   ========================================================= */
+
 .home-carousel__caption-title {
-  min-width: 0;
+  width: auto;
+  max-width: 220px;
 
   color: #ffffff;
 
@@ -266,55 +406,99 @@
     Arial,
     sans-serif;
 
-  font-size: clamp(15px, 4.2vw, 19px);
-  font-weight: 400;
-  line-height: 1.25;
+  font-size:
+    clamp(
+      13px,
+      3.5vw,
+      16px
+    );
 
-  letter-spacing: 0.1px;
+  font-weight: 400;
+
+  line-height: 1.28;
+
+  letter-spacing: 0;
+
+  text-align: center;
+
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 /* =========================================================
    INDICATORS
+   Sedm segmentů jako jedna linie.
    ========================================================= */
 
 .home-carousel__indicators {
   width: 100%;
 
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
 
-  gap: 4px;
+  grid-template-columns:
+    repeat(
+      7,
+      minmax(0, 1fr)
+    );
 
-  margin-top: 8px;
+  column-gap: 3px;
+
+  margin-top: 7px;
 
   pointer-events: auto;
 }
 
+/* =========================================================
+   INDICATOR TOUCH AREA
+   ========================================================= */
+
 .home-carousel__indicator {
+  position: relative;
+
   width: 100%;
-  height: 44px;
+  height: 42px;
 
   display: flex;
+
   align-items: center;
   justify-content: center;
 
-  border: 0;
-  padding: 0;
   margin: 0;
+  padding: 0;
+
+  border: 0;
 
   background: transparent;
+
+  overflow: visible;
 
   cursor: pointer;
 
   -webkit-tap-highlight-color: transparent;
+
   touch-action: manipulation;
 }
+
+/* =========================================================
+   INDICATOR LINE
+   ========================================================= */
 
 .home-carousel__indicator-line {
   display: block;
 
-  width: 100%;
+  width:
+    calc(
+      100% +
+      8px
+    );
+
+  max-width: none;
+
   height: 18px;
+
+  margin:
+    0
+    -4px;
 
   object-fit: fill;
 
@@ -328,6 +512,10 @@
   pointer-events: none;
 }
 
+/* =========================================================
+   ACTIVE INDICATOR
+   ========================================================= */
+
 .home-carousel__indicator.is-active
 .home-carousel__indicator-line {
   opacity: 1;
@@ -335,19 +523,19 @@
 
 .home-carousel__indicator:active
 .home-carousel__indicator-line {
-  transform: scaleX(0.94);
+  transform:
+    scaleX(0.97);
 }
 
 /* =========================================================
    SECTION DIVIDER
-   Pod carousel navigací.
    ========================================================= */
 
 .home-carousel__section-divider {
   width: 100%;
   height: 1px;
 
-  margin-top: 16px;
+  margin-top: 14px;
 
   background:
     rgba(255, 255, 255, 0.18);
@@ -363,11 +551,16 @@
 
 @media (max-width: 374px) {
   .home-carousel__media {
-    height: clamp(300px, 52svh, 450px);
+    height:
+      clamp(
+        340px,
+        57svh,
+        510px
+      );
   }
 
-  .home-carousel__caption {
-    column-gap: 8px;
+  .home-carousel__caption-inner {
+    gap: 8px;
   }
 
   .home-carousel__caption-logo {
@@ -375,11 +568,34 @@
   }
 
   .home-carousel__caption-title {
-    font-size: 14px;
+    max-width: 180px;
+
+    font-size: 13px;
   }
 
   .home-carousel__indicators {
-    gap: 2px;
+    column-gap: 3px;
+  }
+}
+
+/* =========================================================
+   LARGE MOBILE
+   ========================================================= */
+
+@media (min-width: 430px) and (max-width: 767px) {
+  .home-carousel__media {
+    height:
+      clamp(
+        390px,
+        60svh,
+        590px
+      );
+  }
+
+  .home-carousel__caption-title {
+    max-width: 240px;
+
+    font-size: 16px;
   }
 }
 
@@ -389,29 +605,44 @@
 
 @media (min-width: 768px) {
   .home-carousel__media {
-    height: min(62svh, 680px);
+    height:
+      min(
+        64svh,
+        720px
+      );
   }
 
   .home-carousel__caption {
-    min-height: 90px;
-    column-gap: 16px;
+    min-height: 88px;
+
     padding-top: 18px;
   }
 
+  .home-carousel__caption-inner {
+    gap: 14px;
+  }
+
   .home-carousel__caption-logo {
-    width: clamp(150px, 22vw, 210px);
+    width:
+      clamp(
+        150px,
+        22vw,
+        210px
+      );
   }
 
   .home-carousel__caption-separator {
-    height: 38px;
+    height: 30px;
   }
 
   .home-carousel__caption-title {
-    font-size: 21px;
+    max-width: 300px;
+
+    font-size: 18px;
   }
 
   .home-carousel__indicators {
-    gap: 8px;
+    column-gap: 3px;
   }
 }
 
@@ -422,11 +653,24 @@
 @media (min-width: 1200px) {
   .home-view__content {
     max-width: 1100px;
-    margin: 0 auto;
+
+    margin:
+      0
+      auto;
   }
 
   .home-carousel__media {
-    height: min(68vh, 760px);
+    height:
+      min(
+        70vh,
+        800px
+      );
+  }
+
+  .home-carousel__caption-title {
+    max-width: 360px;
+
+    font-size: 19px;
   }
 }
 
