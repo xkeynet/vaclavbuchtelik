@@ -5,9 +5,13 @@
    ========================================================= */
 
 (() => {
+  /* =========================================================
+     CONFIGURATION
+     ========================================================= */
+
   const DIVIDER_LOGO_GAP_PX = 8;
   const SLIDE_INTERVAL_MS = 3000;
-  const SLIDE_TRANSITION_MS = 1050;
+  const SLIDE_TRANSITION_FALLBACK_MS = 1300;
 
   const HOME_SLIDES = [
     {
@@ -40,17 +44,23 @@
     }
   ];
 
+  /* =========================================================
+     STATE
+     ========================================================= */
+
   let homeCreated = false;
   let dividerVisible = false;
   let carouselVisible = false;
+
   let activeIndex = 0;
-  let trackIndex = 0;
   let transitionLocked = false;
+  let wrappingToFirst = false;
 
   let mainView = null;
   let homeView = null;
   let divider = null;
   let carouselTrack = null;
+
   let indicatorButtons = [];
 
   let mainObserver = null;
@@ -60,53 +70,92 @@
 
   let syncFrame = null;
   let autoplayTimer = null;
-  let transitionTimer = null;
+  let transitionFallbackTimer = null;
 
-  const createElement = (tag, className = '') => {
-    const element = document.createElement(tag);
-    if (className) element.className = className;
+  /* =========================================================
+     HELPERS
+     ========================================================= */
+
+  const createElement = (tagName, className = '') => {
+    const element = document.createElement(tagName);
+
+    if (className) {
+      element.className = className;
+    }
+
     return element;
   };
 
   const isMenuOpen = () =>
-    Boolean(mainView?.classList.contains('is-menu-visible'));
+    Boolean(
+      mainView &&
+      mainView.classList.contains('is-menu-visible')
+    );
 
   /* =========================================================
-     DIVIDER
+     DIVIDER POSITION
      ========================================================= */
 
   const getClosedDividerY = () => {
-    const logo = mainView?.querySelector('.main-view__logo');
-    if (!mainView || !logo) return 0;
+    if (!mainView) return 0;
 
-    const mainRect = mainView.getBoundingClientRect();
-    const logoRect = logo.getBoundingClientRect();
+    const logo =
+      mainView.querySelector('.main-view__logo');
 
-    return logoRect.bottom - mainRect.top + DIVIDER_LOGO_GAP_PX;
+    if (!logo) return 0;
+
+    const mainRect =
+      mainView.getBoundingClientRect();
+
+    const logoRect =
+      logo.getBoundingClientRect();
+
+    return (
+      logoRect.bottom -
+      mainRect.top +
+      DIVIDER_LOGO_GAP_PX
+    );
   };
 
   const getOpenDividerY = () => {
-    const original = mainView?.querySelector('.main-menu__divider');
-    if (!mainView || !original) return getClosedDividerY();
+    if (!mainView) return 0;
 
-    const mainRect = mainView.getBoundingClientRect();
-    const dividerRect = original.getBoundingClientRect();
+    const originalDivider =
+      mainView.querySelector('.main-menu__divider');
+
+    if (!originalDivider) {
+      return getClosedDividerY();
+    }
+
+    const mainRect =
+      mainView.getBoundingClientRect();
+
+    const dividerRect =
+      originalDivider.getBoundingClientRect();
 
     return dividerRect.top - mainRect.top;
   };
 
   const syncDividerPosition = () => {
-    if (!mainView || !homeView || !divider) return;
+    if (!mainView || !homeView || !divider) {
+      return;
+    }
 
-    const y = isMenuOpen()
-      ? getOpenDividerY()
-      : getClosedDividerY();
+    const targetY =
+      isMenuOpen()
+        ? getOpenDividerY()
+        : getClosedDividerY();
 
-    homeView.style.setProperty('--home-divider-y', `${y}px`);
+    homeView.style.setProperty(
+      '--home-divider-y',
+      `${targetY}px`
+    );
   };
 
   const scheduleDividerSync = () => {
-    if (syncFrame !== null) cancelAnimationFrame(syncFrame);
+    if (syncFrame !== null) {
+      cancelAnimationFrame(syncFrame);
+    }
 
     syncFrame = requestAnimationFrame(() => {
       syncFrame = null;
@@ -115,46 +164,49 @@
   };
 
   /* =========================================================
-     CAROUSEL
+     INDICATORS
      ========================================================= */
 
   const updateIndicators = () => {
     indicatorButtons.forEach((button, index) => {
-      const active = index === activeIndex;
+      const active =
+        index === activeIndex;
 
-      button.classList.toggle('is-active', active);
-      button.setAttribute('aria-current', active ? 'true' : 'false');
+      button.classList.toggle(
+        'is-active',
+        active
+      );
+
+      button.setAttribute(
+        'aria-current',
+        active ? 'true' : 'false'
+      );
     });
   };
 
-  const setTrackIndex = index => {
-    trackIndex = index;
+  /* =========================================================
+     TRACK
+     ========================================================= */
 
-    carouselTrack?.style.setProperty(
+  const setTrackIndex = index => {
+    if (!carouselTrack) return;
+
+    carouselTrack.style.setProperty(
       '--home-track-index',
-      String(trackIndex)
+      String(index)
     );
   };
 
-  const stopAutoplay = () => {
-    if (autoplayTimer !== null) {
-      clearInterval(autoplayTimer);
-      autoplayTimer = null;
+  const clearTransitionFallback = () => {
+    if (transitionFallbackTimer === null) {
+      return;
     }
+
+    clearTimeout(transitionFallbackTimer);
+    transitionFallbackTimer = null;
   };
 
-  const startAutoplay = () => {
-    stopAutoplay();
-
-    if (!carouselVisible || isMenuOpen() || document.hidden) return;
-
-    autoplayTimer = window.setInterval(() => {
-      const nextIndex = (activeIndex + 1) % HOME_SLIDES.length;
-      goToSlide(nextIndex);
-    }, SLIDE_INTERVAL_MS);
-  };
-
-  const resetTrackAfterLoop = () => {
+  const resetLoopPosition = () => {
     if (!carouselTrack) return;
 
     carouselTrack.classList.add('is-jump');
@@ -163,188 +215,341 @@
     carouselTrack.getBoundingClientRect();
 
     requestAnimationFrame(() => {
-      carouselTrack?.classList.remove('is-jump');
+      if (!carouselTrack) return;
+
+      carouselTrack.classList.remove('is-jump');
     });
   };
+
+  const finishSlideTransition = () => {
+    clearTransitionFallback();
+
+    if (wrappingToFirst) {
+      resetLoopPosition();
+      wrappingToFirst = false;
+    }
+
+    transitionLocked = false;
+  };
+
+  const handleTrackTransitionEnd = event => {
+    if (
+      event.target !== carouselTrack ||
+      event.propertyName !== 'transform'
+    ) {
+      return;
+    }
+
+    finishSlideTransition();
+  };
+
+  /* =========================================================
+     AUTOPLAY
+     ========================================================= */
+
+  const stopAutoplay = () => {
+    if (autoplayTimer === null) return;
+
+    clearInterval(autoplayTimer);
+    autoplayTimer = null;
+  };
+
+  const startAutoplay = () => {
+    stopAutoplay();
+
+    if (
+      !carouselVisible ||
+      isMenuOpen() ||
+      document.hidden
+    ) {
+      return;
+    }
+
+    autoplayTimer = window.setInterval(() => {
+      if (transitionLocked) return;
+
+      const nextIndex =
+        (activeIndex + 1) %
+        HOME_SLIDES.length;
+
+      goToSlide(nextIndex);
+    }, SLIDE_INTERVAL_MS);
+  };
+
+  /* =========================================================
+     GO TO SLIDE
+     ========================================================= */
 
   const goToSlide = (nextIndex, manual = false) => {
     if (
       !carouselTrack ||
       transitionLocked ||
-      nextIndex === activeIndex ||
       nextIndex < 0 ||
       nextIndex >= HOME_SLIDES.length
     ) {
       return;
     }
 
+    if (nextIndex === activeIndex) {
+      if (manual) startAutoplay();
+      return;
+    }
+
     transitionLocked = true;
 
-    const wrapToFirst =
+    wrappingToFirst =
       activeIndex === HOME_SLIDES.length - 1 &&
       nextIndex === 0;
 
     activeIndex = nextIndex;
 
     setTrackIndex(
-      wrapToFirst
+      wrappingToFirst
         ? HOME_SLIDES.length
         : nextIndex
     );
 
     updateIndicators();
 
-    if (transitionTimer !== null) {
-      clearTimeout(transitionTimer);
+    clearTransitionFallback();
+
+    transitionFallbackTimer =
+      window.setTimeout(
+        finishSlideTransition,
+        SLIDE_TRANSITION_FALLBACK_MS
+      );
+
+    if (manual) {
+      startAutoplay();
     }
-
-    transitionTimer = window.setTimeout(() => {
-      transitionTimer = null;
-
-      if (wrapToFirst) {
-        resetTrackAfterLoop();
-      }
-
-      transitionLocked = false;
-    }, SLIDE_TRANSITION_MS);
-
-    if (manual) startAutoplay();
   };
 
+  /* =========================================================
+     SLIDE
+     ========================================================= */
+
   const createSlide = (slide, duplicate = false) => {
-    const article = createElement(
-      'article',
-      'home-carousel__slide'
-    );
+    const article =
+      createElement(
+        'article',
+        'home-carousel__slide'
+      );
 
     if (duplicate) {
-      article.setAttribute('aria-hidden', 'true');
+      article.setAttribute(
+        'aria-hidden',
+        'true'
+      );
     }
 
-    const media = createElement(
-      'div',
-      'home-carousel__media'
-    );
+    const media =
+      createElement(
+        'div',
+        'home-carousel__media'
+      );
 
-    const image = document.createElement('img');
-    image.className = 'home-carousel__image';
+    const image =
+      document.createElement('img');
+
+    image.className =
+      'home-carousel__image';
+
     image.src = slide.image;
     image.alt = slide.title;
     image.decoding = 'async';
     image.draggable = false;
 
-    if (slide === HOME_SLIDES[0] && !duplicate) {
+    if (
+      slide === HOME_SLIDES[0] &&
+      !duplicate
+    ) {
       image.fetchPriority = 'high';
     }
 
     media.appendChild(image);
 
-    const caption = createElement(
-      'div',
-      'home-carousel__caption'
-    );
+    /* ---------------------------------------------------------
+       CAPTION
+       --------------------------------------------------------- */
 
-    const logo = document.createElement('img');
-    logo.className = 'home-carousel__caption-logo';
-    logo.src = '/assets/vb-logo.png';
-    logo.alt = 'Václav Buchtelík';
+    const caption =
+      createElement(
+        'div',
+        'home-carousel__caption'
+      );
+
+    const captionInner =
+      createElement(
+        'div',
+        'home-carousel__caption-inner'
+      );
+
+    const logo =
+      document.createElement('img');
+
+    logo.className =
+      'home-carousel__caption-logo';
+
+    logo.src =
+      '/assets/vb-logo.png';
+
+    logo.alt =
+      'Václav Buchtelík';
+
     logo.decoding = 'async';
     logo.draggable = false;
 
-    const separator = createElement(
-      'span',
-      'home-carousel__caption-separator'
+    const separator =
+      createElement(
+        'span',
+        'home-carousel__caption-separator'
+      );
+
+    separator.setAttribute(
+      'aria-hidden',
+      'true'
     );
 
-    separator.setAttribute('aria-hidden', 'true');
+    const title =
+      createElement(
+        'span',
+        'home-carousel__caption-title'
+      );
 
-    const title = createElement(
-      'span',
-      'home-carousel__caption-title'
+    title.textContent =
+      slide.title;
+
+    captionInner.append(
+      logo,
+      separator,
+      title
     );
 
-    title.textContent = slide.title;
+    caption.appendChild(
+      captionInner
+    );
 
-    caption.append(logo, separator, title);
-    article.append(media, caption);
+    article.append(
+      media,
+      caption
+    );
 
     return article;
   };
 
+  /* =========================================================
+     INDICATOR NAVIGATION
+     ========================================================= */
+
   const createIndicators = () => {
-    const indicators = createElement(
-      'div',
-      'home-carousel__indicators'
-    );
+    const indicators =
+      createElement(
+        'div',
+        'home-carousel__indicators'
+      );
 
     indicators.setAttribute(
       'aria-label',
       'Artwork carousel navigation'
     );
 
-    indicatorButtons = HOME_SLIDES.map((slide, index) => {
-      const button = createElement(
-        'button',
-        'home-carousel__indicator'
+    indicatorButtons =
+      HOME_SLIDES.map(
+        (slide, index) => {
+          const button =
+            createElement(
+              'button',
+              'home-carousel__indicator'
+            );
+
+          button.type = 'button';
+
+          button.setAttribute(
+            'aria-label',
+            `Show artwork ${index + 1}: ${slide.title}`
+          );
+
+          const line =
+            document.createElement('img');
+
+          line.className =
+            'home-carousel__indicator-line';
+
+          line.src =
+            '/assets/icons/line.svg';
+
+          line.alt = '';
+          line.draggable = false;
+
+          button.appendChild(line);
+
+          button.addEventListener(
+            'click',
+            event => {
+              event.preventDefault();
+
+              goToSlide(
+                index,
+                true
+              );
+            }
+          );
+
+          indicators.appendChild(
+            button
+          );
+
+          return button;
+        }
       );
-
-      button.type = 'button';
-      button.setAttribute(
-        'aria-label',
-        `Show artwork ${index + 1}: ${slide.title}`
-      );
-
-      const line = document.createElement('img');
-      line.className = 'home-carousel__indicator-line';
-      line.src = '/assets/icons/line.svg';
-      line.alt = '';
-      line.draggable = false;
-
-      button.appendChild(line);
-
-      button.addEventListener('click', event => {
-        event.preventDefault();
-        goToSlide(index, true);
-      });
-
-      indicators.appendChild(button);
-      return button;
-    });
 
     updateIndicators();
 
     return indicators;
   };
 
-  const createCarousel = () => {
-    const content = createElement(
-      'div',
-      'home-view__content'
-    );
+  /* =========================================================
+     CAROUSEL
+     ========================================================= */
 
-    const carousel = createElement(
-      'section',
-      'home-carousel'
-    );
+  const createCarousel = () => {
+    const content =
+      createElement(
+        'div',
+        'home-view__content'
+      );
+
+    const carousel =
+      createElement(
+        'section',
+        'home-carousel'
+      );
 
     carousel.setAttribute(
       'aria-label',
       'Selected works by Václav Buchtelík'
     );
 
-    const viewport = createElement(
-      'div',
-      'home-carousel__viewport'
-    );
+    const viewport =
+      createElement(
+        'div',
+        'home-carousel__viewport'
+      );
 
-    carouselTrack = createElement(
-      'div',
-      'home-carousel__track'
-    );
+    carouselTrack =
+      createElement(
+        'div',
+        'home-carousel__track'
+      );
 
     carouselTrack.style.setProperty(
       '--home-track-index',
       '0'
+    );
+
+    carouselTrack.addEventListener(
+      'transitionend',
+      handleTrackTransitionEnd
     );
 
     HOME_SLIDES.forEach(slide => {
@@ -354,17 +559,24 @@
     });
 
     carouselTrack.appendChild(
-      createSlide(HOME_SLIDES[0], true)
+      createSlide(
+        HOME_SLIDES[0],
+        true
+      )
     );
 
-    viewport.appendChild(carouselTrack);
-
-    const indicators = createIndicators();
-
-    const sectionDivider = createElement(
-      'div',
-      'home-carousel__section-divider'
+    viewport.appendChild(
+      carouselTrack
     );
+
+    const indicators =
+      createIndicators();
+
+    const sectionDivider =
+      createElement(
+        'div',
+        'home-carousel__section-divider'
+      );
 
     sectionDivider.setAttribute(
       'aria-hidden',
@@ -377,30 +589,47 @@
       sectionDivider
     );
 
-    content.appendChild(carousel);
+    content.appendChild(
+      carousel
+    );
 
     return content;
   };
 
+  /* =========================================================
+     ARRIVAL
+     ========================================================= */
+
   const revealCarousel = () => {
-    if (!homeView || carouselVisible) return;
+    if (
+      !homeView ||
+      carouselVisible
+    ) {
+      return;
+    }
 
     carouselVisible = true;
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        homeView?.classList.add('is-carousel-visible');
+        if (!homeView) return;
+
+        homeView.classList.add(
+          'is-carousel-visible'
+        );
+
         startAutoplay();
       });
     });
   };
 
-  /* =========================================================
-     HOME ARRIVAL
-     ========================================================= */
-
   const revealDivider = () => {
-    if (!homeView || dividerVisible) return;
+    if (
+      !homeView ||
+      dividerVisible
+    ) {
+      return;
+    }
 
     syncDividerPosition();
     dividerVisible = true;
@@ -409,7 +638,9 @@
       requestAnimationFrame(() => {
         if (!homeView) return;
 
-        homeView.classList.add('is-divider-visible');
+        homeView.classList.add(
+          'is-divider-visible'
+        );
 
         window.setTimeout(
           revealCarousel,
@@ -419,11 +650,22 @@
     });
   };
 
+  /* =========================================================
+     CONTROLS ARRIVAL
+     ========================================================= */
+
   const waitForControlsArrival = () => {
-    if (!mainView || dividerVisible) return;
+    if (
+      !mainView ||
+      dividerVisible
+    ) {
+      return;
+    }
 
     const control =
-      mainView.querySelector('.main-view__header-button');
+      mainView.querySelector(
+        '.main-view__header-button'
+      );
 
     if (!control) {
       revealDivider();
@@ -455,50 +697,73 @@
   const watchControls = () => {
     if (!mainView) return;
 
-    if (mainView.classList.contains('is-controls-visible')) {
+    if (
+      mainView.classList.contains(
+        'is-controls-visible'
+      )
+    ) {
       waitForControlsArrival();
       return;
     }
 
-    controlsObserver = new MutationObserver(() => {
-      if (!mainView?.classList.contains('is-controls-visible')) {
-        return;
+    controlsObserver =
+      new MutationObserver(() => {
+        if (
+          !mainView ||
+          !mainView.classList.contains(
+            'is-controls-visible'
+          )
+        ) {
+          return;
+        }
+
+        if (controlsObserver) {
+          controlsObserver.disconnect();
+          controlsObserver = null;
+        }
+
+        waitForControlsArrival();
+      });
+
+    controlsObserver.observe(
+      mainView,
+      {
+        attributes: true,
+        attributeFilter: ['class']
       }
-
-      controlsObserver?.disconnect();
-      controlsObserver = null;
-
-      waitForControlsArrival();
-    });
-
-    controlsObserver.observe(mainView, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
+    );
   };
 
   /* =========================================================
-     MAIN WATCHERS
+     MENU STATE
      ========================================================= */
 
   const watchMenuState = () => {
     if (!mainView) return;
 
-    menuStateObserver = new MutationObserver(() => {
-      scheduleDividerSync();
+    menuStateObserver =
+      new MutationObserver(() => {
+        scheduleDividerSync();
 
-      if (isMenuOpen()) {
-        stopAutoplay();
-      } else {
-        startAutoplay();
+        if (isMenuOpen()) {
+          stopAutoplay();
+        } else {
+          startAutoplay();
+        }
+      });
+
+    menuStateObserver.observe(
+      mainView,
+      {
+        attributes: true,
+        attributeFilter: ['class']
       }
-    });
-
-    menuStateObserver.observe(mainView, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
+    );
   };
+
+  /* =========================================================
+     MENU LAYOUT
+     ========================================================= */
 
   const watchMenuLayout = () => {
     if (
@@ -508,18 +773,31 @@
       return;
     }
 
-    layoutObserver = new ResizeObserver(
-      scheduleDividerSync
-    );
+    layoutObserver =
+      new ResizeObserver(
+        scheduleDividerSync
+      );
 
     [
-      mainView.querySelector('.main-menu__content'),
-      mainView.querySelector('.main-menu__list'),
-      mainView.querySelector('.main-view__logo'),
-      ...mainView.querySelectorAll('.main-menu__panel')
+      mainView.querySelector(
+        '.main-menu__content'
+      ),
+      mainView.querySelector(
+        '.main-menu__list'
+      ),
+      mainView.querySelector(
+        '.main-view__logo'
+      ),
+      ...mainView.querySelectorAll(
+        '.main-menu__panel'
+      )
     ]
       .filter(Boolean)
-      .forEach(element => layoutObserver.observe(element));
+      .forEach(element => {
+        layoutObserver.observe(
+          element
+        );
+      });
   };
 
   /* =========================================================
@@ -527,25 +805,34 @@
      ========================================================= */
 
   const createHome = () => {
-    if (homeCreated || !mainView) return;
+    if (
+      homeCreated ||
+      !mainView
+    ) {
+      return;
+    }
 
     homeCreated = true;
 
-    homeView = createElement(
-      'section',
-      'home-view'
-    );
+    homeView =
+      createElement(
+        'section',
+        'home-view'
+      );
 
-    homeView.id = 'homeView';
+    homeView.id =
+      'homeView';
+
     homeView.setAttribute(
       'aria-label',
       'Václav Buchtelík home'
     );
 
-    divider = createElement(
-      'div',
-      'home-view__divider'
-    );
+    divider =
+      createElement(
+        'div',
+        'home-view__divider'
+      );
 
     divider.setAttribute(
       'aria-hidden',
@@ -557,7 +844,9 @@
       createCarousel()
     );
 
-    mainView.appendChild(homeView);
+    mainView.appendChild(
+      homeView
+    );
 
     syncDividerPosition();
     watchControls();
@@ -565,11 +854,19 @@
     watchMenuLayout();
   };
 
+  /* =========================================================
+     FIND MAIN
+     ========================================================= */
+
   const findMain = () => {
     const existingMain =
-      document.getElementById('mainView');
+      document.getElementById(
+        'mainView'
+      );
 
-    if (!existingMain) return false;
+    if (!existingMain) {
+      return false;
+    }
 
     mainView = existingMain;
     createHome();
@@ -582,7 +879,9 @@
      ========================================================= */
 
   const handleResize = () => {
-    if (mainView) scheduleDividerSync();
+    if (!mainView) return;
+
+    scheduleDividerSync();
   };
 
   window.addEventListener(
@@ -608,17 +907,27 @@
     }
   );
 
+  /* =========================================================
+     START
+     ========================================================= */
+
   if (!findMain()) {
-    mainObserver = new MutationObserver(() => {
-      if (!findMain()) return;
+    mainObserver =
+      new MutationObserver(() => {
+        if (!findMain()) return;
 
-      mainObserver?.disconnect();
-      mainObserver = null;
-    });
+        if (mainObserver) {
+          mainObserver.disconnect();
+          mainObserver = null;
+        }
+      });
 
-    mainObserver.observe(document.body, {
-      childList: true
-    });
+    mainObserver.observe(
+      document.body,
+      {
+        childList: true
+      }
+    );
   }
 
   /* =========================================================
@@ -628,19 +937,38 @@
   window.addEventListener(
     'pagehide',
     () => {
-      mainObserver?.disconnect();
-      controlsObserver?.disconnect();
-      menuStateObserver?.disconnect();
-      layoutObserver?.disconnect();
-
-      stopAutoplay();
-
-      if (syncFrame !== null) {
-        cancelAnimationFrame(syncFrame);
+      if (mainObserver) {
+        mainObserver.disconnect();
       }
 
-      if (transitionTimer !== null) {
-        clearTimeout(transitionTimer);
+      if (controlsObserver) {
+        controlsObserver.disconnect();
+      }
+
+      if (menuStateObserver) {
+        menuStateObserver.disconnect();
+      }
+
+      if (layoutObserver) {
+        layoutObserver.disconnect();
+      }
+
+      if (
+        carouselTrack
+      ) {
+        carouselTrack.removeEventListener(
+          'transitionend',
+          handleTrackTransitionEnd
+        );
+      }
+
+      stopAutoplay();
+      clearTransitionFallback();
+
+      if (syncFrame !== null) {
+        cancelAnimationFrame(
+          syncFrame
+        );
       }
 
       mainObserver = null;
@@ -648,8 +976,9 @@
       menuStateObserver = null;
       layoutObserver = null;
       syncFrame = null;
-      transitionTimer = null;
     },
-    { once: true }
+    {
+      once: true
+    }
   );
 })();
