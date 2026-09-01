@@ -1,6 +1,6 @@
 /* =========================================================
-   VÁCLAV BUCHTELÍK — HOME / PHASE 6
-   PHOTO CAROUSEL + FIRST SLIDE MOTTO
+   VÁCLAV BUCHTELÍK — HOME / PHASE 7
+   PHOTO CAROUSEL + CLEAN ARTWORK CAPTIONS
    ========================================================= */
 
 .main-view.is-visible {
@@ -152,7 +152,7 @@
 }
 
 /* =========================================================
-   STANDARD CAPTION — SLIDES 2–7
+   CAPTION BASE
    ========================================================= */
 
 .home-carousel__caption {
@@ -160,49 +160,45 @@
   padding: 9px 20px 0;
 }
 
-.home-carousel__caption-inner {
-  width: fit-content;
+/* =========================================================
+   ARTWORK CAPTION — SLIDES 2–7
+   ========================================================= */
+
+.home-carousel__caption--artwork {
+  padding: 9px 0 0;
+}
+
+.home-carousel__caption--artwork .home-carousel__caption-inner {
+  width: 100%;
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-
-.home-carousel__caption-logo {
-  display: block;
-  width: clamp(135px, 40vw, 187.5px);
-  height: auto;
-  flex: 0 0 auto;
-  object-fit: contain;
-  pointer-events: none;
-}
-
-.home-carousel__caption-text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 6px;
   color: #ffffff;
   font-family: "Chakra Petch", Arial, sans-serif;
-  font-size: clamp(17.5px, 4.625vw, 21.25px);
-  font-weight: 400;
+  font-size: clamp(15.75px, 4.1625vw, 19.125px);
   line-height: 1.18;
   letter-spacing: 0;
-  text-align: center;
+  text-align: left;
 }
 
-.home-carousel__caption-line {
-  display: block;
-  width: max-content;
-  max-width: 100%;
+.home-carousel__caption-title {
+  display: inline-block;
+  flex: 0 0 auto;
+  font: inherit;
+  font-weight: 700;
   white-space: nowrap;
-  text-align: center;
 }
 
-.home-carousel__caption-line--secondary { margin-top: 1px; }
+.home-carousel__caption-year {
+  display: inline-block;
+  flex: 0 0 auto;
+  font: inherit;
+  font-weight: 400;
+  white-space: nowrap;
+}
 
 /* =========================================================
    FIRST SLIDE MOTTO
@@ -218,7 +214,7 @@
 
 .home-carousel__motto {
   display: block;
-  width: min(69%, 420px);
+  width: min(86.25%, 525px);
   height: auto;
   margin: 0 auto;
   object-fit: contain;
@@ -235,10 +231,22 @@
 
 @media (max-width: 374px) {
   .home-carousel__caption { padding-left: 14px; padding-right: 14px; }
-  .home-carousel__caption-logo { width: 130px; }
-  .home-carousel__caption-text { font-size: 16.25px; }
-  .home-carousel__caption--motto { padding-left: 0; padding-right: 0; }
-  .home-carousel__motto { width: 70.5%; }
+
+  .home-carousel__caption--artwork {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .home-carousel__caption--artwork .home-carousel__caption-inner {
+    font-size: 14.625px;
+  }
+
+  .home-carousel__caption--motto {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .home-carousel__motto { width: 88.125%; }
 }
 
 /* =========================================================
@@ -247,10 +255,13 @@
 
 @media (min-width: 768px) {
   .home-carousel__caption { padding-top: 11px; }
-  .home-carousel__caption-logo { width: clamp(187.5px, 27.5vw, 262.5px); }
-  .home-carousel__caption-text { font-size: 22.5px; }
+
+  .home-carousel__caption--artwork .home-carousel__caption-inner {
+    font-size: 20.25px;
+  }
+
   .home-carousel__caption--motto { padding-top: 10px; }
-  .home-carousel__motto { width: min(58.5%, 540px); }
+  .home-carousel__motto { width: min(73.125%, 675px); }
 }
 
 /* =========================================================
@@ -263,8 +274,11 @@
     margin: 0 auto;
   }
 
-  .home-carousel__caption-text { font-size: 23.75px; }
-  .home-carousel__motto { width: min(51%, 570px); }
+  .home-carousel__caption--artwork .home-carousel__caption-inner {
+    font-size: 21.375px;
+  }
+
+  .home-carousel__motto { width: min(63.75%, 712.5px); }
 }
 
 /* =========================================================
