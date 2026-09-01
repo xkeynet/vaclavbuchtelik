@@ -1,24 +1,23 @@
 'use strict';
 
 /* =========================================================
-   VÁCLAV BUCHTELÍK — HOME / PHASE 6
-   PHOTO CAROUSEL + FIRST SLIDE MOTTO
+   VÁCLAV BUCHTELÍK — HOME / PHASE 7
+   PHOTO CAROUSEL + CLEAN ARTWORK CAPTIONS
    ========================================================= */
 
 (() => {
   const DIVIDER_LOGO_GAP_PX = 8;
   const SLIDE_INTERVAL_MS = 3000;
-  const CAPTION_LOGO_SRC = '/assets/vb-logo.png';
   const MOTTO_LOGO_SRC = '/assets/img/optimism.png';
 
   const HOME_SLIDES = [
     { image: '/assets/home/home-001.jpg', motto: true, title: 'Z optimistických nálad tvořit nedokážu' },
-    { image: '/assets/home/home-002.png', title: 'Dým 2019' },
-    { image: '/assets/home/home-003.png', title: 'Dítě 2019' },
-    { image: '/assets/home/home-004.png', title: 'Koukej 2019' },
-    { image: '/assets/home/home-005.png', title: 'Trhej! 2019' },
-    { image: '/assets/home/home-006.png', title: 'Skok do ohně 2020' },
-    { image: '/assets/home/home-007.png', title: 'Schody do pekla 2020' }
+    { image: '/assets/home/home-002.png', title: 'Dým', year: '2019' },
+    { image: '/assets/home/home-003.png', title: 'Dítě', year: '2019' },
+    { image: '/assets/home/home-004.png', title: 'Koukej', year: '2019' },
+    { image: '/assets/home/home-005.png', title: 'Trhej!', year: '2019' },
+    { image: '/assets/home/home-006.png', title: 'Skok do ohně', year: '2020' },
+    { image: '/assets/home/home-007.png', title: 'Schody do pekla', year: '2020' }
   ];
 
   let mainView = null;
@@ -227,23 +226,15 @@
      ========================================================= */
 
   const createStandardCaption = item => {
-    const caption = createElement('div', 'home-carousel__caption');
+    const caption = createElement('div', 'home-carousel__caption home-carousel__caption--artwork');
     const inner = createElement('div', 'home-carousel__caption-inner');
-
-    const logo = document.createElement('img');
-    logo.className = 'home-carousel__caption-logo';
-    logo.src = CAPTION_LOGO_SRC;
-    logo.alt = 'Václav Buchtelík';
-    logo.decoding = 'async';
-    logo.draggable = false;
-
-    const text = createElement('div', 'home-carousel__caption-text');
-    const title = createElement('span', 'home-carousel__caption-line home-carousel__caption-line--primary');
+    const title = createElement('span', 'home-carousel__caption-title');
+    const year = createElement('span', 'home-carousel__caption-year');
 
     title.textContent = item.title;
-    text.appendChild(title);
+    year.textContent = item.year;
 
-    inner.append(logo, text);
+    inner.append(title, year);
     caption.appendChild(inner);
 
     return caption;
@@ -265,10 +256,11 @@
     slides = HOME_SLIDES.map((item, index) => {
       const slide = createElement('article', 'home-carousel__slide');
       const image = document.createElement('img');
+      const fullTitle = item.year ? `${item.title} ${item.year}` : item.title;
 
       image.className = 'home-carousel__image';
       image.src = item.image;
-      image.alt = item.title;
+      image.alt = fullTitle;
       image.decoding = 'async';
       image.draggable = false;
 
