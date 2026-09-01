@@ -1,6 +1,6 @@
 /* =========================================================
-   VÁCLAV BUCHTELÍK — HOME / PHASE 2
-   PHOTO CAROUSEL + MENU VISIBILITY
+   VÁCLAV BUCHTELÍK — HOME / PHASE 4
+   PHOTO CAROUSEL + CAPTIONS
    ========================================================= */
 
 .main-view.is-visible {
@@ -61,13 +61,7 @@
   pointer-events: none;
 }
 
-/* =========================================================
-   HOME CONTENT — MENU HIDDEN
-   ========================================================= */
-
-.main-view.is-menu-visible .home-view__content {
-  display: none;
-}
+.main-view.is-menu-visible .home-view__content { display: none; }
 
 /* =========================================================
    CAROUSEL
@@ -138,7 +132,7 @@
 }
 
 /* =========================================================
-   IMAGES
+   IMAGE
    ========================================================= */
 
 .home-carousel__image {
@@ -158,6 +152,77 @@
 }
 
 /* =========================================================
+   CAPTION
+   ========================================================= */
+
+.home-carousel__caption {
+  width: 100%;
+  padding: 10px 0 0;
+}
+
+.home-carousel__caption-inner {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.home-carousel__caption-logo {
+  display: block;
+  width: clamp(108px, 32vw, 150px);
+  height: auto;
+  flex: 0 0 auto;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.home-carousel__caption-separator {
+  display: block;
+  width: 1px;
+  height: 30px;
+  flex: 0 0 1px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.home-carousel__caption-title {
+  display: block;
+  max-width: 220px;
+  color: #ffffff;
+  font-family: "Chakra Petch", Arial, sans-serif;
+  font-size: clamp(13px, 3.5vw, 16px);
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+/* =========================================================
+   SMALL MOBILE
+   ========================================================= */
+
+@media (max-width: 374px) {
+  .home-carousel__caption-inner { gap: 7px; }
+  .home-carousel__caption-logo { width: 104px; }
+  .home-carousel__caption-title { max-width: 180px; font-size: 13px; }
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (min-width: 768px) {
+  .home-carousel__caption { padding-top: 12px; }
+  .home-carousel__caption-inner { gap: 12px; }
+  .home-carousel__caption-logo { width: clamp(150px, 22vw, 210px); }
+  .home-carousel__caption-separator { height: 34px; }
+  .home-carousel__caption-title { max-width: 300px; font-size: 18px; }
+}
+
+/* =========================================================
    DESKTOP
    ========================================================= */
 
@@ -166,6 +231,8 @@
     max-width: 1100px;
     margin: 0 auto;
   }
+
+  .home-carousel__caption-title { max-width: 360px; font-size: 19px; }
 }
 
 /* =========================================================
