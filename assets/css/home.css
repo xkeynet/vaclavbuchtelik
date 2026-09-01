@@ -214,7 +214,7 @@
 
 .home-carousel__motto {
   display: block;
-  width: min(86.25%, 525px);
+  width: min(94%, 575px);
   height: auto;
   margin: 0 auto;
   object-fit: contain;
