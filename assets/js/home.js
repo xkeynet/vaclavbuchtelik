@@ -1,8 +1,8 @@
 'use strict';
 
 /* =========================================================
-   VÁCLAV BUCHTELÍK — HOME / PHASE 4
-   PHOTO CAROUSEL + CAPTIONS
+   VÁCLAV BUCHTELÍK — HOME / PHASE 5
+   PHOTO CAROUSEL + CENTERED CAPTIONS
    ========================================================= */
 
 (() => {
@@ -11,13 +11,13 @@
   const CAPTION_LOGO_SRC = '/assets/vb-logo.png';
 
   const HOME_SLIDES = [
-    { image: '/assets/home/home-001.jpg', title: 'Z optimistických nálad tvořit nedokážu' },
-    { image: '/assets/home/home-002.png', title: 'Dým 2019' },
-    { image: '/assets/home/home-003.png', title: 'Dítě 2019' },
-    { image: '/assets/home/home-004.png', title: 'Koukej 2019' },
-    { image: '/assets/home/home-005.png', title: 'Trhej! 2019' },
-    { image: '/assets/home/home-006.png', title: 'Skok do ohně 2020' },
-    { image: '/assets/home/home-007.png', title: 'Schody do pekla 2020' }
+    { image: '/assets/home/home-001.jpg', line1: 'Z optimistických nálad', line2: 'tvořit nedokážu' },
+    { image: '/assets/home/home-002.png', line1: 'Dým 2019' },
+    { image: '/assets/home/home-003.png', line1: 'Dítě 2019' },
+    { image: '/assets/home/home-004.png', line1: 'Koukej 2019' },
+    { image: '/assets/home/home-005.png', line1: 'Trhej! 2019' },
+    { image: '/assets/home/home-006.png', line1: 'Skok do ohně 2020' },
+    { image: '/assets/home/home-007.png', line1: 'Schody do pekla 2020' }
   ];
 
   let mainView = null;
@@ -86,7 +86,6 @@
 
   /* =========================================================
      SLIDE SIZE
-     Image + caption together.
      ========================================================= */
 
   const getSlideHeight = index => {
@@ -203,7 +202,7 @@
      CAPTION
      ========================================================= */
 
-  const createCaption = title => {
+  const createCaption = item => {
     const caption = createElement('div', 'home-carousel__caption');
     const inner = createElement('div', 'home-carousel__caption-inner');
 
@@ -214,13 +213,19 @@
     logo.decoding = 'async';
     logo.draggable = false;
 
-    const separator = createElement('span', 'home-carousel__caption-separator');
-    separator.setAttribute('aria-hidden', 'true');
+    const text = createElement('div', 'home-carousel__caption-text');
 
-    const text = createElement('span', 'home-carousel__caption-title');
-    text.textContent = title;
+    const line1 = createElement('span', 'home-carousel__caption-line home-carousel__caption-line--primary');
+    line1.textContent = item.line1;
+    text.appendChild(line1);
 
-    inner.append(logo, separator, text);
+    if (item.line2) {
+      const line2 = createElement('span', 'home-carousel__caption-line home-carousel__caption-line--secondary');
+      line2.textContent = item.line2;
+      text.appendChild(line2);
+    }
+
+    inner.append(logo, text);
     caption.appendChild(inner);
 
     return caption;
@@ -240,10 +245,11 @@
     slides = HOME_SLIDES.map((item, index) => {
       const slide = createElement('article', 'home-carousel__slide');
       const image = document.createElement('img');
+      const fullTitle = item.line2 ? `${item.line1} ${item.line2}` : item.line1;
 
       image.className = 'home-carousel__image';
       image.src = item.image;
-      image.alt = item.title;
+      image.alt = fullTitle;
       image.decoding = 'async';
       image.draggable = false;
 
@@ -253,7 +259,7 @@
         if (index === activeIndex) syncViewportHeight(index, !carouselVisible);
       });
 
-      slide.append(image, createCaption(item.title));
+      slide.append(image, createCaption(item));
       viewport.appendChild(slide);
 
       return slide;
