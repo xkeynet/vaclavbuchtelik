@@ -1,23 +1,24 @@
 'use strict';
 
 /* =========================================================
-   VÁCLAV BUCHTELÍK — HOME / PHASE 5
-   PHOTO CAROUSEL + CENTERED CAPTIONS
+   VÁCLAV BUCHTELÍK — HOME / PHASE 6
+   PHOTO CAROUSEL + FIRST SLIDE MOTTO
    ========================================================= */
 
 (() => {
   const DIVIDER_LOGO_GAP_PX = 8;
   const SLIDE_INTERVAL_MS = 3000;
   const CAPTION_LOGO_SRC = '/assets/vb-logo.png';
+  const MOTTO_LOGO_SRC = '/assets/img/optimism.png';
 
   const HOME_SLIDES = [
-    { image: '/assets/home/home-001.jpg', line1: 'Z optimistických nálad', line2: 'tvořit nedokážu' },
-    { image: '/assets/home/home-002.png', line1: 'Dým 2019' },
-    { image: '/assets/home/home-003.png', line1: 'Dítě 2019' },
-    { image: '/assets/home/home-004.png', line1: 'Koukej 2019' },
-    { image: '/assets/home/home-005.png', line1: 'Trhej! 2019' },
-    { image: '/assets/home/home-006.png', line1: 'Skok do ohně 2020' },
-    { image: '/assets/home/home-007.png', line1: 'Schody do pekla 2020' }
+    { image: '/assets/home/home-001.jpg', motto: true, title: 'Z optimistických nálad tvořit nedokážu' },
+    { image: '/assets/home/home-002.png', title: 'Dým 2019' },
+    { image: '/assets/home/home-003.png', title: 'Dítě 2019' },
+    { image: '/assets/home/home-004.png', title: 'Koukej 2019' },
+    { image: '/assets/home/home-005.png', title: 'Trhej! 2019' },
+    { image: '/assets/home/home-006.png', title: 'Skok do ohně 2020' },
+    { image: '/assets/home/home-007.png', title: 'Schody do pekla 2020' }
   ];
 
   let mainView = null;
@@ -199,10 +200,33 @@
   };
 
   /* =========================================================
-     CAPTION
+     FIRST SLIDE MOTTO
      ========================================================= */
 
-  const createCaption = item => {
+  const createMottoCaption = item => {
+    const caption = createElement('div', 'home-carousel__caption home-carousel__caption--motto');
+    const motto = document.createElement('img');
+
+    motto.className = 'home-carousel__motto';
+    motto.src = MOTTO_LOGO_SRC;
+    motto.alt = item.title;
+    motto.decoding = 'async';
+    motto.draggable = false;
+
+    motto.addEventListener('load', () => {
+      if (activeIndex === 0) syncViewportHeight(0, !carouselVisible);
+    });
+
+    caption.appendChild(motto);
+
+    return caption;
+  };
+
+  /* =========================================================
+     STANDARD CAPTION — SLIDES 2–7
+     ========================================================= */
+
+  const createStandardCaption = item => {
     const caption = createElement('div', 'home-carousel__caption');
     const inner = createElement('div', 'home-carousel__caption-inner');
 
@@ -214,22 +238,18 @@
     logo.draggable = false;
 
     const text = createElement('div', 'home-carousel__caption-text');
+    const title = createElement('span', 'home-carousel__caption-line home-carousel__caption-line--primary');
 
-    const line1 = createElement('span', 'home-carousel__caption-line home-carousel__caption-line--primary');
-    line1.textContent = item.line1;
-    text.appendChild(line1);
-
-    if (item.line2) {
-      const line2 = createElement('span', 'home-carousel__caption-line home-carousel__caption-line--secondary');
-      line2.textContent = item.line2;
-      text.appendChild(line2);
-    }
+    title.textContent = item.title;
+    text.appendChild(title);
 
     inner.append(logo, text);
     caption.appendChild(inner);
 
     return caption;
   };
+
+  const createCaption = item => item.motto ? createMottoCaption(item) : createStandardCaption(item);
 
   /* =========================================================
      CREATE CAROUSEL
@@ -245,11 +265,10 @@
     slides = HOME_SLIDES.map((item, index) => {
       const slide = createElement('article', 'home-carousel__slide');
       const image = document.createElement('img');
-      const fullTitle = item.line2 ? `${item.line1} ${item.line2}` : item.line1;
 
       image.className = 'home-carousel__image';
       image.src = item.image;
-      image.alt = fullTitle;
+      image.alt = item.title;
       image.decoding = 'async';
       image.draggable = false;
 
