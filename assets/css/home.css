@@ -172,7 +172,7 @@
 
 .home-carousel__caption-logo {
   display: block;
-  width: clamp(108px, 32vw, 150px);
+  width: clamp(135px, 40vw, 187.5px);
   height: auto;
   flex: 0 0 auto;
   object-fit: contain;
@@ -187,7 +187,7 @@
   justify-content: center;
   color: #ffffff;
   font-family: "Chakra Petch", Arial, sans-serif;
-  font-size: clamp(14px, 3.7vw, 17px);
+  font-size: clamp(17.5px, 4.625vw, 21.25px);
   font-weight: 400;
   line-height: 1.18;
   letter-spacing: 0;
@@ -218,7 +218,7 @@
 
 .home-carousel__motto {
   display: block;
-  width: min(92%, 560px);
+  width: min(69%, 420px);
   height: auto;
   margin: 0 auto;
   object-fit: contain;
@@ -235,10 +235,10 @@
 
 @media (max-width: 374px) {
   .home-carousel__caption { padding-left: 14px; padding-right: 14px; }
-  .home-carousel__caption-logo { width: 104px; }
-  .home-carousel__caption-text { font-size: 13px; }
+  .home-carousel__caption-logo { width: 130px; }
+  .home-carousel__caption-text { font-size: 16.25px; }
   .home-carousel__caption--motto { padding-left: 0; padding-right: 0; }
-  .home-carousel__motto { width: 94%; }
+  .home-carousel__motto { width: 70.5%; }
 }
 
 /* =========================================================
@@ -247,10 +247,10 @@
 
 @media (min-width: 768px) {
   .home-carousel__caption { padding-top: 11px; }
-  .home-carousel__caption-logo { width: clamp(150px, 22vw, 210px); }
-  .home-carousel__caption-text { font-size: 18px; }
+  .home-carousel__caption-logo { width: clamp(187.5px, 27.5vw, 262.5px); }
+  .home-carousel__caption-text { font-size: 22.5px; }
   .home-carousel__caption--motto { padding-top: 10px; }
-  .home-carousel__motto { width: min(78%, 720px); }
+  .home-carousel__motto { width: min(58.5%, 540px); }
 }
 
 /* =========================================================
@@ -263,8 +263,8 @@
     margin: 0 auto;
   }
 
-  .home-carousel__caption-text { font-size: 19px; }
-  .home-carousel__motto { width: min(68%, 760px); }
+  .home-carousel__caption-text { font-size: 23.75px; }
+  .home-carousel__motto { width: min(51%, 570px); }
 }
 
 /* =========================================================
