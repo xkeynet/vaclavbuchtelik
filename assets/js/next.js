@@ -1,8 +1,8 @@
 'use strict';
 
 /* =========================================================
-   VÁCLAV BUCHTELÍK — NEXT / PHASE 1
-   CAROUSEL SEEKBAR + ARRIVAL
+   VÁCLAV BUCHTELÍK — NEXT / PHASE 2
+   INTERACTIVE CAROUSEL SEEKBAR
    ========================================================= */
 
 (() => {
@@ -15,7 +15,6 @@
   let segments = [];
   let mainObserver = null;
   let homeObserver = null;
-  let slideObserver = null;
   let revealed = false;
 
   const createElement = (tag, className = '') => {
@@ -28,26 +27,43 @@
      ACTIVE SEGMENT
      ========================================================= */
 
-  const syncActiveSegment = () => {
-    if (!homeView || !segments.length) return;
-
-    const slides = [...homeView.querySelectorAll('.home-carousel__slide')];
-    const activeIndex = slides.findIndex(slide => slide.classList.contains('is-active') || slide.classList.contains('is-entering'));
-    const index = activeIndex >= 0 ? activeIndex : 0;
+  const setActiveSegment = index => {
+    if (!segments.length) return;
 
     segments.forEach((segment, segmentIndex) => {
-      segment.classList.toggle('is-active', segmentIndex === index);
+      const active = segmentIndex === index;
+
+      segment.classList.toggle('is-active', active);
+      segment.setAttribute('aria-current', active ? 'true' : 'false');
     });
+  };
+
+  const handleSlideChange = event => {
+    const index = Number(event.detail?.index);
+    if (!Number.isInteger(index) || index < 0 || index >= SEGMENT_COUNT) return;
+
+    setActiveSegment(index);
+  };
+
+  /* =========================================================
+     NAVIGATION
+     ========================================================= */
+
+  const goToSlide = index => {
+    if (!homeView || mainView?.classList.contains('is-menu-visible')) return;
+
+    document.dispatchEvent(new CustomEvent('vb:home-go-to-slide', {
+      detail: { index }
+    }));
   };
 
   /* =========================================================
      ARRIVAL
-     Sedm segmentů vystřelí zprava v rychlém sledu současně
-     s příjezdem prvního slidu.
      ========================================================= */
 
   const revealSeek = () => {
     if (!seek || revealed) return;
+
     revealed = true;
 
     requestAnimationFrame(() => {
@@ -66,32 +82,32 @@
     const viewport = carousel?.querySelector('.home-carousel__viewport');
     if (!carousel || !viewport) return;
 
-    seek = createElement('div', 'home-carousel__seek');
-    seek.setAttribute('aria-hidden', 'true');
+    seek = createElement('nav', 'home-carousel__seek');
+    seek.setAttribute('aria-label', 'Artwork carousel navigation');
 
     segments = Array.from({ length: SEGMENT_COUNT }, (_, index) => {
-      const segment = createElement('span', 'home-carousel__seek-segment');
+      const button = createElement('button', 'home-carousel__seek-segment');
       const line = document.createElement('img');
 
-      segment.style.setProperty('--seek-index', String(index));
+      button.type = 'button';
+      button.style.setProperty('--seek-index', String(index));
+      button.setAttribute('aria-label', `Show artwork ${index + 1}`);
+
       line.className = 'home-carousel__seek-line';
       line.src = LINE_SRC;
       line.alt = '';
       line.decoding = 'async';
       line.draggable = false;
 
-      segment.appendChild(line);
-      seek.appendChild(segment);
-      return segment;
+      button.appendChild(line);
+      button.addEventListener('click', () => goToSlide(index));
+
+      seek.appendChild(button);
+      return button;
     });
 
     viewport.insertAdjacentElement('afterend', seek);
-    syncActiveSegment();
-
-    slideObserver = new MutationObserver(syncActiveSegment);
-    homeView.querySelectorAll('.home-carousel__slide').forEach(slide => {
-      slideObserver.observe(slide, { attributes: true, attributeFilter: ['class'] });
-    });
+    setActiveSegment(0);
 
     homeObserver = new MutationObserver(() => {
       if (homeView?.classList.contains('is-carousel-visible')) revealSeek();
@@ -109,15 +125,19 @@
   const findHome = () => {
     mainView = document.getElementById('mainView');
     homeView = document.getElementById('homeView');
+
     if (!mainView || !homeView) return false;
 
     createSeek();
     return Boolean(seek);
   };
 
+  document.addEventListener('vb:home-slide-change', handleSlideChange);
+
   if (!findHome()) {
     mainObserver = new MutationObserver(() => {
       if (!findHome()) return;
+
       mainObserver.disconnect();
       mainObserver = null;
     });
@@ -132,10 +152,14 @@
   window.addEventListener('pagehide', () => {
     mainObserver?.disconnect();
     homeObserver?.disconnect();
-    slideObserver?.disconnect();
+
+    segments.forEach((segment, index) => {
+      segment.replaceWith(segment.cloneNode(true));
+    });
+
+    document.removeEventListener('vb:home-slide-change', handleSlideChange);
 
     mainObserver = null;
     homeObserver = null;
-    slideObserver = null;
   }, { once: true });
 })();
