@@ -1,1 +1,79 @@
+/* =========================================================
+   VÁCLAV BUCHTELÍK — NEXT / PHASE 1
+   CAROUSEL SEEKBAR + ARRIVAL
+   ========================================================= */
 
+.home-carousel__seek {
+  width: min(76%, 470px);
+  margin: 13px auto 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  align-items: center;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.home-carousel__seek-segment {
+  width: 100%;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translate3d(calc(100vw + 80px), 0, 0);
+  transition: transform 720ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms linear;
+  transition-delay: calc(var(--seek-index) * 65ms);
+  will-change: transform, opacity;
+}
+
+.home-carousel__seek-line {
+  display: block;
+  width: 100%;
+  height: 18px;
+  object-fit: fill;
+  opacity: 0.28;
+  transition: opacity 220ms linear;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.home-carousel__seek.is-visible .home-carousel__seek-segment {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.home-carousel__seek-segment.is-active .home-carousel__seek-line { opacity: 1; }
+
+/* =========================================================
+   MENU
+   HOME content už mizí přes home.css; toto je pojistka.
+   ========================================================= */
+
+.main-view.is-menu-visible .home-carousel__seek { visibility: hidden; }
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 374px) {
+  .home-carousel__seek { width: 78%; margin-top: 11px; gap: 3px; }
+}
+
+@media (min-width: 768px) {
+  .home-carousel__seek { width: min(68%, 560px); margin-top: 15px; }
+}
+
+@media (min-width: 1200px) {
+  .home-carousel__seek { width: min(62%, 620px); }
+}
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .home-carousel__seek-segment { transition-duration: 300ms, 120ms; transition-delay: calc(var(--seek-index) * 35ms); }
+}
