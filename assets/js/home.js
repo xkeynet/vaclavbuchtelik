@@ -7,7 +7,7 @@
 
 (() => {
   const DIVIDER_LOGO_GAP_PX = 8;
-  const SLIDE_INTERVAL_MS = 3000;
+  const SLIDE_INTERVAL_MS = 5000;
   const MOTTO_LOGO_SRC = '/assets/img/optimism.png';
 
   const HOME_SLIDES = [
@@ -46,6 +46,12 @@
   };
 
   const isMenuOpen = () => Boolean(mainView?.classList.contains('is-menu-visible'));
+
+  const dispatchSlideChange = () => {
+    document.dispatchEvent(new CustomEvent('vb:home-slide-change', {
+      detail: { index: activeIndex, count: slides.length }
+    }));
+  };
 
   /* =========================================================
      DIVIDER
@@ -187,6 +193,7 @@
 
         next.addEventListener('transitionend', onEnd);
         activeIndex = nextIndex;
+        dispatchSlideChange();
       });
     });
   };
@@ -196,6 +203,18 @@
 
     const nextIndex = activeIndex === slides.length - 1 ? 0 : activeIndex + 1;
     transitionTo(nextIndex);
+  };
+
+  const handleExternalSlideRequest = event => {
+    const index = Number(event.detail?.index);
+    if (!Number.isInteger(index) || index < 0 || index >= slides.length) return;
+
+    if (index === activeIndex) {
+      scheduleAutoplay();
+      return;
+    }
+
+    transitionTo(index);
   };
 
   /* =========================================================
@@ -301,6 +320,7 @@
         homeView.classList.add('is-carousel-visible');
         slides[0].classList.remove('is-prepared');
         slides[0].classList.add('is-active');
+        dispatchSlideChange();
 
         const onEnd = event => {
           if (event.target !== slides[0] || event.propertyName !== 'transform') return;
@@ -441,6 +461,8 @@
     else scheduleAutoplay();
   });
 
+  document.addEventListener('vb:home-go-to-slide', handleExternalSlideRequest);
+
   if (!findMain()) {
     mainObserver = new MutationObserver(() => {
       if (!findMain()) return;
@@ -463,6 +485,8 @@
     layoutObserver?.disconnect();
 
     stopAutoplay();
+
+    document.removeEventListener('vb:home-go-to-slide', handleExternalSlideRequest);
 
     if (syncFrame !== null) cancelAnimationFrame(syncFrame);
   }, { once: true });
