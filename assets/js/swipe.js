@@ -3,7 +3,7 @@
 /* =========================================================
    VÁCLAV BUCHTELÍK — SWIPE ENGINE
    PREVIOUS + CURRENT + NEXT
-   CINEMATIC MOTION + INPUT BUFFER
+   INTERRUPTIBLE CINEMATIC MOTION
    ========================================================= */
 
 (() => {
@@ -25,7 +25,9 @@
     snapMaxDurationMs: 420,
 
     cinematicPower: 4.2,
-    cinematicTailStrength: 0.16
+    cinematicTailStrength: 0.16,
+
+    takeoverMinDistancePx: 6
   };
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -77,10 +79,17 @@
     let current = options.layers?.current || null;
     let next = options.layers?.next || null;
 
+    /* =========================================================
+       STATE
+       ========================================================= */
+
     let enabled = false;
     let destroyed = false;
+
     let dragging = false;
     let animating = false;
+    let takingOver = false;
+
     let axis = null;
     let pointerId = null;
 
@@ -96,19 +105,8 @@
     let raf = 0;
     let motionToken = 0;
 
-    /* =========================================================
-       BUFFERED GESTURE
-       ========================================================= */
-
-    let bufferTracking = false;
-    let bufferAxis = null;
-    let bufferStartX = 0;
-    let bufferStartY = 0;
-    let bufferLastY = 0;
-    let bufferLastTime = 0;
-    let bufferDragY = 0;
-    let bufferVelocityY = 0;
-    let bufferedDirection = 0;
+    let motionDirection = 0;
+    let takeoverOrigin = 0;
 
     /* =========================================================
        LAYERS
@@ -136,7 +134,7 @@
     };
 
     /* =========================================================
-       MOTION STATE
+       MOTION
        ========================================================= */
 
     const cancelMotion = () => {
@@ -148,30 +146,22 @@
       }
     };
 
-    const resetGestureState = () => {
+    const resetGesture = () => {
       dragging = false;
+      takingOver = false;
       axis = null;
-      pointerId = null;
-      dragY = 0;
+
+      startX = 0;
+      startY = 0;
+      lastY = 0;
+      lastTime = 0;
+
       velocityY = 0;
+      takeoverOrigin = 0;
     };
 
-    const resetBufferGesture = () => {
-      bufferTracking = false;
-      bufferAxis = null;
-
-      bufferStartX = 0;
-      bufferStartY = 0;
-      bufferLastY = 0;
-      bufferLastTime = 0;
-
-      bufferDragY = 0;
-      bufferVelocityY = 0;
-    };
-
-    const clearBuffer = () => {
-      resetBufferGesture();
-      bufferedDirection = 0;
+    const resetPointer = () => {
+      pointerId = null;
     };
 
     const resetGeometry = () => {
@@ -180,9 +170,12 @@
       cancelMotion();
 
       viewportHeight = getViewportHeight(viewport);
+
       dragY = 0;
       velocityY = 0;
+      motionDirection = 0;
 
+      resetGesture();
       prepareLayers(false);
       renderTrack(0);
     };
@@ -193,7 +186,7 @@
     };
 
     /* =========================================================
-       RAF MOTION
+       CINEMATIC RAF
        ========================================================= */
 
     const animate = ({ from, to, duration, easing, complete }) => {
@@ -216,11 +209,13 @@
           return;
         }
 
-        const elapsed = now - startedAt;
-        const progress = clamp(elapsed / Math.max(1, duration), 0, 1);
-        const eased = easing(progress);
+        const progress = clamp(
+          (now - startedAt) / Math.max(1, duration),
+          0,
+          1
+        );
 
-        dragY = from + distance * eased;
+        dragY = from + distance * easing(progress);
         renderTrack(dragY);
 
         if (progress < 1) {
@@ -239,7 +234,7 @@
     };
 
     /* =========================================================
-       CINEMATIC COMMIT DURATION
+       DURATION
        ========================================================= */
 
     const getCommitDuration = remainingDistance => {
@@ -249,10 +244,8 @@
         1
       );
 
-      const releaseSpeed = Math.abs(velocityY);
-
       const velocityReduction = clamp(
-        releaseSpeed * config.commitVelocityInfluence * 100,
+        Math.abs(velocityY) * config.commitVelocityInfluence * 100,
         0,
         110
       );
@@ -271,152 +264,42 @@
     };
 
     /* =========================================================
-       BUFFERED INPUT
+       RECYCLE
        ========================================================= */
 
-    const beginBufferedGesture = (x, y) => {
-      if (destroyed || !enabled || !animating) return false;
+    const recycle = direction => {
+      if (!isDirection(direction)) return false;
 
-      bufferTracking = true;
-      bufferAxis = null;
+      dragY = 0;
+      velocityY = 0;
 
-      bufferStartX = x;
-      bufferStartY = y;
+      onCommit?.(direction);
 
-      bufferLastY = y;
-      bufferLastTime = performance.now();
+      if (destroyed || !hasLayers()) return false;
 
-      bufferDragY = 0;
-      bufferVelocityY = 0;
+      viewportHeight = getViewportHeight(viewport);
+      renderTrack(0);
 
       return true;
-    };
-
-    const updateBufferedGesture = (x, y) => {
-      if (
-        destroyed ||
-        !enabled ||
-        !animating ||
-        !bufferTracking
-      ) {
-        return false;
-      }
-
-      const dx = x - bufferStartX;
-      const dy = y - bufferStartY;
-
-      if (!bufferAxis) {
-        if (
-          Math.abs(dx) < config.axisLockPx &&
-          Math.abs(dy) < config.axisLockPx
-        ) {
-          return false;
-        }
-
-        bufferAxis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
-
-        if (bufferAxis !== 'vertical') {
-          resetBufferGesture();
-          return false;
-        }
-      }
-
-      const now = performance.now();
-      const dt = Math.max(1, now - bufferLastTime);
-      const instantVelocity = (y - bufferLastY) / dt;
-
-      bufferVelocityY =
-        bufferVelocityY * (1 - config.velocitySmoothing) +
-        instantVelocity * config.velocitySmoothing;
-
-      bufferLastY = y;
-      bufferLastTime = now;
-      bufferDragY = dy;
-
-      return true;
-    };
-
-    const endBufferedGesture = cancelled => {
-      if (!bufferTracking) return;
-
-      const distance = Math.abs(bufferDragY);
-
-      const threshold = Math.max(
-        config.commitMinDistancePx,
-        viewportHeight * config.commitDistanceRatio
-      );
-
-      const distanceCommit = distance >= threshold;
-
-      const flickCommit =
-        distance >= config.flickMinDistancePx &&
-        Math.abs(bufferVelocityY) >= config.flickVelocityPxMs &&
-        Math.sign(bufferVelocityY) === Math.sign(bufferDragY);
-
-      if (
-        !cancelled &&
-        bufferAxis === 'vertical' &&
-        bufferDragY !== 0 &&
-        (distanceCommit || flickCommit)
-      ) {
-        bufferedDirection = bufferDragY < 0 ? 1 : -1;
-      }
-
-      resetBufferGesture();
     };
 
     /* =========================================================
        COMMIT
        ========================================================= */
 
-    const runBufferedCommit = () => {
-      if (
-        destroyed ||
-        !enabled ||
-        animating ||
-        !isDirection(bufferedDirection)
-      ) {
-        return;
-      }
-
-      const direction = bufferedDirection;
-      bufferedDirection = 0;
-
-      dragY = 0;
-      velocityY = 0;
-
-      commit(direction);
-    };
-
     const finishCommit = direction => {
-      dragY = 0;
-      velocityY = 0;
-      dragging = false;
-      axis = null;
       animating = false;
+      motionDirection = 0;
 
-      /*
-       * gallery.js owns PREVIOUS / CURRENT / NEXT recycling.
-       * After recycling it returns the current references
-       * through setLayers().
-       */
-      onCommit?.(direction);
+      recycle(direction);
 
       if (destroyed || !hasLayers()) return;
 
-      viewportHeight = getViewportHeight(viewport);
-      renderTrack(0);
-
-      if (isDirection(bufferedDirection)) {
-        prepareLayers(true);
-        requestAnimationFrame(runBufferedCommit);
-        return;
-      }
-
+      resetGesture();
       prepareLayers(false);
     };
 
-    function commit(direction) {
+    const commit = direction => {
       if (
         destroyed ||
         !enabled ||
@@ -426,15 +309,7 @@
         return false;
       }
 
-      if (animating) {
-        bufferedDirection = direction;
-        return true;
-      }
-
-      if (raf) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
+      if (animating) return false;
 
       viewportHeight = getViewportHeight(viewport);
 
@@ -444,6 +319,8 @@
 
       animating = true;
       dragging = false;
+      takingOver = false;
+      motionDirection = direction;
 
       animate({
         from,
@@ -454,53 +331,43 @@
       });
 
       return true;
-    }
+    };
 
     /* =========================================================
        SNAP BACK
        ========================================================= */
 
     const finishSnapBack = () => {
+      animating = false;
+      motionDirection = 0;
+
       dragY = 0;
       velocityY = 0;
-      dragging = false;
-      axis = null;
-      animating = false;
 
+      resetGesture();
       renderTrack(0);
-
-      if (isDirection(bufferedDirection)) {
-        prepareLayers(true);
-        requestAnimationFrame(runBufferedCommit);
-        return;
-      }
-
       prepareLayers(false);
     };
 
     const snapBack = () => {
       if (destroyed || !enabled || animating) return;
 
-      if (raf) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-
       viewportHeight = getViewportHeight(viewport);
 
       const from = clamp(dragY, -viewportHeight, viewportHeight);
-      const distanceRatio = Math.abs(from) / Math.max(1, viewportHeight);
+      const ratio = Math.abs(from) / Math.max(1, viewportHeight);
 
       const duration = clamp(
         config.snapMinDurationMs +
-          distanceRatio *
-            (config.snapMaxDurationMs - config.snapMinDurationMs),
+          ratio * (config.snapMaxDurationMs - config.snapMinDurationMs),
         config.snapMinDurationMs,
         config.snapMaxDurationMs
       );
 
       animating = true;
       dragging = false;
+      takingOver = false;
+      motionDirection = 0;
 
       animate({
         from,
@@ -512,20 +379,142 @@
     };
 
     /* =========================================================
-       GESTURE
+       TAKEOVER
+       ========================================================= */
+
+    const beginTakeover = (x, y) => {
+      if (
+        destroyed ||
+        !enabled ||
+        !animating ||
+        !isDirection(motionDirection)
+      ) {
+        return false;
+      }
+
+      /*
+       * Do not stop the cinematic motion on touchstart.
+       * The finger first proves that this is a vertical gesture.
+       * This prevents a simple tap from freezing the animation.
+       */
+      takingOver = true;
+      dragging = false;
+      axis = null;
+
+      startX = x;
+      startY = y;
+
+      lastY = y;
+      lastTime = performance.now();
+
+      takeoverOrigin = dragY;
+      velocityY = 0;
+
+      return true;
+    };
+
+    const activateTakeover = y => {
+      const direction = motionDirection;
+
+      /*
+       * Capture the exact rendered position before cancelling RAF.
+       */
+      takeoverOrigin = dragY;
+
+      cancelMotion();
+
+      animating = false;
+      motionDirection = 0;
+      dragging = true;
+
+      /*
+       * The old card has already committed logically once the user
+       * starts another intentional swipe in the same direction.
+       * Finish its boundary atomically, recycle, then transfer the
+       * remaining finger movement to the new CURRENT.
+       */
+      if (!recycle(direction)) return false;
+
+      startY = y;
+      lastY = y;
+      lastTime = performance.now();
+
+      dragY = 0;
+      velocityY = 0;
+
+      prepareMotion();
+
+      return true;
+    };
+
+    const updateTakeover = (x, y) => {
+      if (!takingOver || !isDirection(motionDirection)) return false;
+
+      const dx = x - startX;
+      const dy = y - startY;
+
+      if (!axis) {
+        if (
+          Math.abs(dx) < config.axisLockPx &&
+          Math.abs(dy) < config.axisLockPx
+        ) {
+          return false;
+        }
+
+        axis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+
+        if (axis !== 'vertical') {
+          takingOver = false;
+          axis = null;
+          return false;
+        }
+      }
+
+      const gestureDirection = dy < 0 ? 1 : -1;
+
+      /*
+       * Same-direction gesture = continuous swipe.
+       * Opposite direction does not destroy the running cinematic
+       * commit; the original motion is allowed to finish normally.
+       */
+      if (
+        gestureDirection !== motionDirection ||
+        Math.abs(dy) < config.takeoverMinDistancePx
+      ) {
+        return true;
+      }
+
+      if (!activateTakeover(y)) return false;
+
+      /*
+       * Preserve the part of this gesture that already happened
+       * before takeover instead of throwing it away.
+       */
+      const transferredDistance =
+        Math.sign(dy) * Math.max(0, Math.abs(dy) - config.takeoverMinDistancePx);
+
+      startY = y - transferredDistance;
+      dragY = clamp(transferredDistance, -viewportHeight, viewportHeight);
+
+      renderTrack(dragY);
+
+      return true;
+    };
+
+    /* =========================================================
+       NORMAL GESTURE
        ========================================================= */
 
     const beginGesture = (x, y) => {
       if (destroyed || !enabled) return false;
 
-      if (animating) {
-        return beginBufferedGesture(x, y);
-      }
+      if (animating) return beginTakeover(x, y);
 
       cancelMotion();
       prepareMotion();
 
       dragging = true;
+      takingOver = false;
       axis = null;
 
       startX = x;
@@ -540,13 +529,7 @@
       return true;
     };
 
-    const updateGesture = (x, y) => {
-      if (destroyed || !enabled) return false;
-
-      if (animating) {
-        return updateBufferedGesture(x, y);
-      }
-
+    const updateDrag = (x, y) => {
       if (!dragging) return false;
 
       const dx = x - startX;
@@ -586,15 +569,33 @@
       return true;
     };
 
+    const updateGesture = (x, y) => {
+      if (destroyed || !enabled) return false;
+
+      if (takingOver && animating) return updateTakeover(x, y);
+      if (dragging && !animating) return updateDrag(x, y);
+
+      return false;
+    };
+
+    /* =========================================================
+       END GESTURE
+       ========================================================= */
+
     const endGesture = cancelled => {
       if (destroyed || !enabled) return;
 
-      if (animating) {
-        endBufferedGesture(cancelled);
+      /*
+       * Finger was placed during cinematic motion but never took
+       * control. Leave the existing animation untouched.
+       */
+      if (takingOver && animating) {
+        takingOver = false;
+        axis = null;
         return;
       }
 
-      if (!dragging) return;
+      if (!dragging || animating) return;
 
       const distance = Math.abs(dragY);
 
@@ -625,7 +626,7 @@
         return;
       }
 
-      resetGestureState();
+      resetGesture();
       resetGeometry();
     };
 
@@ -663,7 +664,7 @@
         destroyed ||
         !enabled ||
         event.touches.length !== 1 ||
-        (!dragging && !bufferTracking)
+        (!dragging && !takingOver)
       ) {
         return;
       }
@@ -707,7 +708,7 @@
         !enabled ||
         event.pointerType === 'touch' ||
         pointerId !== event.pointerId ||
-        (!dragging && !bufferTracking)
+        (!dragging && !takingOver)
       ) {
         return;
       }
@@ -722,7 +723,7 @@
         viewport.releasePointerCapture(event.pointerId);
       }
 
-      pointerId = null;
+      resetPointer();
     };
 
     const handlePointerUp = event => {
@@ -774,7 +775,14 @@
       current = nextLayers?.current || current;
       next = nextLayers?.next || next;
 
-      if (hasLayers()) resetGeometry();
+      /*
+       * During recycle the swipe engine owns the motion state.
+       * Do not cancel an active takeover from inside onCommit().
+       */
+      if (hasLayers()) {
+        viewportHeight = getViewportHeight(viewport);
+        renderTrack(0);
+      }
     };
 
     const enable = () => {
@@ -782,9 +790,10 @@
 
       enabled = true;
       animating = false;
+      motionDirection = 0;
 
-      clearBuffer();
-      resetGestureState();
+      resetPointer();
+      resetGesture();
       resetGeometry();
     };
 
@@ -793,13 +802,16 @@
 
       enabled = false;
       animating = false;
+      motionDirection = 0;
 
       cancelMotion();
-      clearBuffer();
-      resetGestureState();
+      resetPointer();
+      resetGesture();
 
       if (hasLayers()) {
         viewportHeight = getViewportHeight(viewport);
+        dragY = 0;
+
         prepareLayers(false);
         renderTrack(0);
       }
@@ -809,9 +821,10 @@
       if (destroyed) return;
 
       animating = false;
+      motionDirection = 0;
 
-      clearBuffer();
-      resetGestureState();
+      resetPointer();
+      resetGesture();
       resetGeometry();
     };
 
@@ -820,7 +833,7 @@
 
       viewportHeight = getViewportHeight(viewport);
 
-      if (!dragging && !animating) {
+      if (!dragging && !animating && !takingOver) {
         resetGeometry();
       }
     };
@@ -830,10 +843,13 @@
 
       enabled = false;
       destroyed = true;
+
       animating = false;
+      dragging = false;
+      takingOver = false;
+      motionDirection = 0;
 
       cancelMotion();
-      clearBuffer();
 
       viewport.removeEventListener('touchstart', handleTouchStart);
       viewport.removeEventListener('touchmove', handleTouchMove);
@@ -854,7 +870,8 @@
       previous = null;
       current = null;
       next = null;
-      pointerId = null;
+
+      resetPointer();
     };
 
     /* =========================================================
