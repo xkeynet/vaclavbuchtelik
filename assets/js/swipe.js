@@ -3,7 +3,7 @@
 /* =========================================================
    VÁCLAV BUCHTELÍK — SWIPE ENGINE
    PREVIOUS + CURRENT + NEXT
-   CINEMATIC MOTION
+   CINEMATIC MOTION + INPUT BUFFER
    ========================================================= */
 
 (() => {
@@ -97,6 +97,20 @@
     let motionToken = 0;
 
     /* =========================================================
+       BUFFERED GESTURE
+       ========================================================= */
+
+    let bufferTracking = false;
+    let bufferAxis = null;
+    let bufferStartX = 0;
+    let bufferStartY = 0;
+    let bufferLastY = 0;
+    let bufferLastTime = 0;
+    let bufferDragY = 0;
+    let bufferVelocityY = 0;
+    let bufferedDirection = 0;
+
+    /* =========================================================
        LAYERS
        ========================================================= */
 
@@ -140,6 +154,24 @@
       pointerId = null;
       dragY = 0;
       velocityY = 0;
+    };
+
+    const resetBufferGesture = () => {
+      bufferTracking = false;
+      bufferAxis = null;
+
+      bufferStartX = 0;
+      bufferStartY = 0;
+      bufferLastY = 0;
+      bufferLastTime = 0;
+
+      bufferDragY = 0;
+      bufferVelocityY = 0;
+    };
+
+    const clearBuffer = () => {
+      resetBufferGesture();
+      bufferedDirection = 0;
     };
 
     const resetGeometry = () => {
@@ -239,8 +271,122 @@
     };
 
     /* =========================================================
+       BUFFERED INPUT
+       ========================================================= */
+
+    const beginBufferedGesture = (x, y) => {
+      if (destroyed || !enabled || !animating) return false;
+
+      bufferTracking = true;
+      bufferAxis = null;
+
+      bufferStartX = x;
+      bufferStartY = y;
+
+      bufferLastY = y;
+      bufferLastTime = performance.now();
+
+      bufferDragY = 0;
+      bufferVelocityY = 0;
+
+      return true;
+    };
+
+    const updateBufferedGesture = (x, y) => {
+      if (
+        destroyed ||
+        !enabled ||
+        !animating ||
+        !bufferTracking
+      ) {
+        return false;
+      }
+
+      const dx = x - bufferStartX;
+      const dy = y - bufferStartY;
+
+      if (!bufferAxis) {
+        if (
+          Math.abs(dx) < config.axisLockPx &&
+          Math.abs(dy) < config.axisLockPx
+        ) {
+          return false;
+        }
+
+        bufferAxis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+
+        if (bufferAxis !== 'vertical') {
+          resetBufferGesture();
+          return false;
+        }
+      }
+
+      const now = performance.now();
+      const dt = Math.max(1, now - bufferLastTime);
+      const instantVelocity = (y - bufferLastY) / dt;
+
+      bufferVelocityY =
+        bufferVelocityY * (1 - config.velocitySmoothing) +
+        instantVelocity * config.velocitySmoothing;
+
+      bufferLastY = y;
+      bufferLastTime = now;
+      bufferDragY = dy;
+
+      return true;
+    };
+
+    const endBufferedGesture = cancelled => {
+      if (!bufferTracking) return;
+
+      const distance = Math.abs(bufferDragY);
+
+      const threshold = Math.max(
+        config.commitMinDistancePx,
+        viewportHeight * config.commitDistanceRatio
+      );
+
+      const distanceCommit = distance >= threshold;
+
+      const flickCommit =
+        distance >= config.flickMinDistancePx &&
+        Math.abs(bufferVelocityY) >= config.flickVelocityPxMs &&
+        Math.sign(bufferVelocityY) === Math.sign(bufferDragY);
+
+      if (
+        !cancelled &&
+        bufferAxis === 'vertical' &&
+        bufferDragY !== 0 &&
+        (distanceCommit || flickCommit)
+      ) {
+        bufferedDirection = bufferDragY < 0 ? 1 : -1;
+      }
+
+      resetBufferGesture();
+    };
+
+    /* =========================================================
        COMMIT
        ========================================================= */
+
+    const runBufferedCommit = () => {
+      if (
+        destroyed ||
+        !enabled ||
+        animating ||
+        !isDirection(bufferedDirection)
+      ) {
+        return;
+      }
+
+      const direction = bufferedDirection;
+      bufferedDirection = 0;
+
+      dragY = 0;
+      velocityY = 0;
+
+      commit(direction);
+    };
 
     const finishCommit = direction => {
       dragY = 0;
@@ -260,18 +406,29 @@
 
       viewportHeight = getViewportHeight(viewport);
       renderTrack(0);
+
+      if (isDirection(bufferedDirection)) {
+        prepareLayers(true);
+        requestAnimationFrame(runBufferedCommit);
+        return;
+      }
+
       prepareLayers(false);
     };
 
-    const commit = direction => {
+    function commit(direction) {
       if (
         destroyed ||
         !enabled ||
         !hasLayers() ||
-        !isDirection(direction) ||
-        animating
+        !isDirection(direction)
       ) {
         return false;
+      }
+
+      if (animating) {
+        bufferedDirection = direction;
+        return true;
       }
 
       if (raf) {
@@ -297,7 +454,7 @@
       });
 
       return true;
-    };
+    }
 
     /* =========================================================
        SNAP BACK
@@ -311,6 +468,13 @@
       animating = false;
 
       renderTrack(0);
+
+      if (isDirection(bufferedDirection)) {
+        prepareLayers(true);
+        requestAnimationFrame(runBufferedCommit);
+        return;
+      }
+
       prepareLayers(false);
     };
 
@@ -352,7 +516,11 @@
        ========================================================= */
 
     const beginGesture = (x, y) => {
-      if (destroyed || !enabled || animating) return false;
+      if (destroyed || !enabled) return false;
+
+      if (animating) {
+        return beginBufferedGesture(x, y);
+      }
 
       cancelMotion();
       prepareMotion();
@@ -373,7 +541,13 @@
     };
 
     const updateGesture = (x, y) => {
-      if (destroyed || !enabled || !dragging || animating) return false;
+      if (destroyed || !enabled) return false;
+
+      if (animating) {
+        return updateBufferedGesture(x, y);
+      }
+
+      if (!dragging) return false;
 
       const dx = x - startX;
       const dy = y - startY;
@@ -413,7 +587,14 @@
     };
 
     const endGesture = cancelled => {
-      if (destroyed || !enabled || !dragging || animating) return;
+      if (destroyed || !enabled) return;
+
+      if (animating) {
+        endBufferedGesture(cancelled);
+        return;
+      }
+
+      if (!dragging) return;
 
       const distance = Math.abs(dragY);
 
@@ -467,7 +648,6 @@
       if (
         destroyed ||
         !enabled ||
-        animating ||
         event.touches.length !== 1 ||
         isExcludedTarget(event.target)
       ) {
@@ -482,8 +662,8 @@
       if (
         destroyed ||
         !enabled ||
-        !dragging ||
-        event.touches.length !== 1
+        event.touches.length !== 1 ||
+        (!dragging && !bufferTracking)
       ) {
         return;
       }
@@ -506,7 +686,6 @@
       if (
         destroyed ||
         !enabled ||
-        animating ||
         event.pointerType === 'touch' ||
         event.button !== 0 ||
         isExcludedTarget(event.target)
@@ -528,7 +707,7 @@
         !enabled ||
         event.pointerType === 'touch' ||
         pointerId !== event.pointerId ||
-        !dragging
+        (!dragging && !bufferTracking)
       ) {
         return;
       }
@@ -604,6 +783,7 @@
       enabled = true;
       animating = false;
 
+      clearBuffer();
       resetGestureState();
       resetGeometry();
     };
@@ -615,6 +795,7 @@
       animating = false;
 
       cancelMotion();
+      clearBuffer();
       resetGestureState();
 
       if (hasLayers()) {
@@ -629,6 +810,7 @@
 
       animating = false;
 
+      clearBuffer();
       resetGestureState();
       resetGeometry();
     };
@@ -651,6 +833,7 @@
       animating = false;
 
       cancelMotion();
+      clearBuffer();
 
       viewport.removeEventListener('touchstart', handleTouchStart);
       viewport.removeEventListener('touchmove', handleTouchMove);
