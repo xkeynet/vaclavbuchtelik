@@ -1,1 +1,258 @@
+/* =========================================================
+   VÁCLAV BUCHTELÍK — GALLERY
+   ========================================================= */
 
+:root {
+  --gallery-background: #000000;
+  --gallery-foreground: #ffffff;
+  --gallery-grey: #9b9b9b;
+  --gallery-gap: 6px;
+  --gallery-side: 12px;
+  --gallery-header-height: 72px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--gallery-background);
+}
+
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: var(--gallery-background);
+  color: var(--gallery-foreground);
+  font-family: "Chakra Petch", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+a {
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: 0;
+}
+
+img {
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* =========================================================
+   GALLERY
+   ========================================================= */
+
+.gallery {
+  width: 100%;
+  min-height: 100svh;
+  padding:
+    env(safe-area-inset-top, 0px)
+    var(--gallery-side)
+    calc(28px + env(safe-area-inset-bottom, 0px));
+  background: var(--gallery-background);
+  opacity: 0;
+  transition: opacity 220ms linear;
+}
+
+.gallery.is-ready {
+  opacity: 1;
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.gallery__header {
+  position: relative;
+  width: 100%;
+  height: var(--gallery-header-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gallery__back {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: var(--gallery-grey);
+  font-size: 27px;
+  font-weight: 300;
+  line-height: 1;
+  text-decoration: none;
+  transform: translateY(-50%);
+  transition: color 120ms linear, opacity 120ms linear;
+}
+
+.gallery__back:visited {
+  color: var(--gallery-grey);
+}
+
+.gallery__back:hover,
+.gallery__back:focus-visible {
+  color: var(--gallery-foreground);
+}
+
+.gallery__back:active {
+  opacity: 0.65;
+}
+
+.gallery__title {
+  margin: 0;
+  padding: 0;
+  color: var(--gallery-foreground);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.14em;
+}
+
+/* =========================================================
+   GRID
+   ========================================================= */
+
+.gallery__grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--gallery-gap);
+}
+
+/* =========================================================
+   ITEM
+   ========================================================= */
+
+.gallery__item {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #080808;
+  cursor: pointer;
+  outline: none;
+}
+
+.gallery__item:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.8);
+  outline-offset: -1px;
+}
+
+.gallery__item:active {
+  opacity: 0.82;
+}
+
+/* =========================================================
+   IMAGE
+   ========================================================= */
+
+.gallery__image {
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  object-fit: contain;
+  background: #080808;
+}
+
+/* =========================================================
+   LARGE MOBILE
+   ========================================================= */
+
+@media (min-width: 430px) {
+  :root {
+    --gallery-gap: 8px;
+    --gallery-side: 16px;
+  }
+}
+
+/* =========================================================
+   TABLET
+   ========================================================= */
+
+@media (min-width: 768px) {
+  :root {
+    --gallery-gap: 10px;
+    --gallery-side: 24px;
+    --gallery-header-height: 82px;
+  }
+
+  .gallery__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .gallery__title {
+    font-size: 17px;
+  }
+}
+
+/* =========================================================
+   DESKTOP
+   ========================================================= */
+
+@media (min-width: 1200px) {
+  :root {
+    --gallery-gap: 12px;
+    --gallery-side: 36px;
+    --gallery-header-height: 90px;
+  }
+
+  .gallery {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  .gallery__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .gallery__item {
+    transition: opacity 160ms linear;
+  }
+
+  .gallery__item:hover {
+    opacity: 0.82;
+  }
+}
+
+/* =========================================================
+   REDUCED MOTION
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery {
+    transition-duration: 1ms;
+  }
+
+  .gallery__item {
+    transition: none;
+  }
+}
