@@ -3,31 +3,32 @@
 /* =========================================================
    VÁCLAV BUCHTELÍK — SWIPE ENGINE
    PREVIOUS + CURRENT + NEXT
+   CINEMATIC MOTION
    ========================================================= */
 
 (() => {
   const DEFAULTS = {
     axisLockPx: 4,
+
     commitDistanceRatio: 0.10,
     commitMinDistancePx: 28,
     flickMinDistancePx: 10,
     flickVelocityPxMs: 0.20,
-    velocitySmoothing: 0.42,
+    velocitySmoothing: 0.38,
 
-    commitBaseSpeedPxMs: 2.10,
-    commitMinSpeedPxMs: 1.65,
-    commitMaxSpeedPxMs: 5.20,
-    commitMinDurationMs: 150,
-    commitMaxDurationMs: 380,
+    commitMinDurationMs: 420,
+    commitMaxDurationMs: 680,
+    commitDistanceDurationMs: 560,
+    commitVelocityInfluence: 0.18,
 
-    snapMinDurationMs: 150,
-    snapMaxDurationMs: 280,
-    maxQueuedSwipes: 6
+    snapMinDurationMs: 260,
+    snapMaxDurationMs: 420,
+
+    cinematicPower: 4.2,
+    cinematicTailStrength: 0.16
   };
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  const easeOutQuint = t => 1 - Math.pow(1 - t, 5);
-  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
   const isDirection = direction => direction === 1 || direction === -1;
 
   const getViewportHeight = viewport => Math.max(
@@ -38,6 +39,27 @@
     document.documentElement.clientHeight || 0
   );
 
+  /* =========================================================
+     EASING
+     ========================================================= */
+
+  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+
+  const createCinematicEase = (power, tailStrength) => {
+    const p = Math.max(2, power);
+    const tail = clamp(tailStrength, 0, 0.4);
+
+    return t => {
+      const base = 1 - Math.pow(1 - t, p);
+      const tailShape = Math.sin(Math.PI * t) * (1 - t);
+      return clamp(base - tailShape * tail, 0, 1);
+    };
+  };
+
+  /* =========================================================
+     CREATE
+     ========================================================= */
+
   const create = options => {
     if (!options?.viewport) throw new Error('[VB Swipe] viewport is required.');
 
@@ -45,6 +67,11 @@
     const exclude = typeof options.exclude === 'string' ? options.exclude : '';
     const onCommit = typeof options.onCommit === 'function' ? options.onCommit : null;
     const config = { ...DEFAULTS, ...(options.config || {}) };
+
+    const cinematicEase = createCinematicEase(
+      config.cinematicPower,
+      config.cinematicTailStrength
+    );
 
     let previous = options.layers?.previous || null;
     let current = options.layers?.current || null;
@@ -61,14 +88,13 @@
     let startY = 0;
     let lastY = 0;
     let lastTime = 0;
+
     let dragY = 0;
     let velocityY = 0;
     let viewportHeight = 1;
 
     let raf = 0;
     let motionToken = 0;
-
-    const queue = [];
 
     /* =========================================================
        LAYERS
@@ -78,13 +104,14 @@
     const hasLayers = () => Boolean(previous && current && next);
 
     const setTransform = (layer, y) => {
-      if (layer) layer.style.transform = `translate3d(0,${y.toFixed(3)}px,0)`;
+      if (!layer) return;
+      layer.style.transform = `translate3d(0,${y.toFixed(3)}px,0)`;
     };
 
-    const setWillChange = value => {
+    const prepareLayers = active => {
       layers().forEach(layer => {
-        layer.style.willChange = value;
         layer.style.transition = 'none';
+        layer.style.willChange = active ? 'transform' : 'auto';
       });
     };
 
@@ -95,10 +122,10 @@
     };
 
     /* =========================================================
-       STATE / GEOMETRY
+       MOTION STATE
        ========================================================= */
 
-    const cancelFrame = () => {
+    const cancelMotion = () => {
       motionToken++;
 
       if (raf) {
@@ -107,7 +134,7 @@
       }
     };
 
-    const resetGesture = () => {
+    const resetGestureState = () => {
       dragging = false;
       axis = null;
       pointerId = null;
@@ -118,63 +145,50 @@
     const resetGeometry = () => {
       if (destroyed || !hasLayers()) return;
 
-      cancelFrame();
+      cancelMotion();
+
       viewportHeight = getViewportHeight(viewport);
-      setWillChange('auto');
       dragY = 0;
       velocityY = 0;
+
+      prepareLayers(false);
       renderTrack(0);
     };
 
     const prepareMotion = () => {
       viewportHeight = getViewportHeight(viewport);
-      setWillChange('transform');
+      prepareLayers(true);
     };
 
     /* =========================================================
-       QUEUE
+       RAF MOTION
        ========================================================= */
 
-    const enqueue = direction => {
-      if (!isDirection(direction)) return;
-
-      if (queue.length >= config.maxQueuedSwipes) queue.shift();
-      queue.push(direction);
-    };
-
-    const runQueue = () => {
-      if (destroyed || !enabled || animating || !queue.length) return;
-
-      const direction = queue.shift();
-
-      dragY = 0;
-      velocityY = direction > 0 ? -config.commitMaxSpeedPxMs : config.commitMaxSpeedPxMs;
-
-      prepareMotion();
-      commit(direction, true);
-    };
-
-    /* =========================================================
-       ANIMATION
-       ========================================================= */
-
-    const animate = (from, to, duration, easing, complete) => {
-      cancelFrame();
+    const animate = ({ from, to, duration, easing, complete }) => {
+      cancelMotion();
 
       const token = motionToken;
       const startedAt = performance.now();
       const distance = to - from;
 
-      setWillChange('transform');
+      prepareLayers(true);
 
       const frame = now => {
-        if (destroyed || !enabled || !animating || token !== motionToken) {
+        if (
+          destroyed ||
+          !enabled ||
+          !animating ||
+          token !== motionToken
+        ) {
           raf = 0;
           return;
         }
 
-        const progress = clamp((now - startedAt) / Math.max(1, duration), 0, 1);
-        dragY = from + distance * easing(progress);
+        const elapsed = now - startedAt;
+        const progress = clamp(elapsed / Math.max(1, duration), 0, 1);
+        const eased = easing(progress);
+
+        dragY = from + distance * eased;
         renderTrack(dragY);
 
         if (progress < 1) {
@@ -185,24 +199,40 @@
         raf = 0;
         dragY = to;
         renderTrack(to);
+
         complete?.();
       };
 
       raf = requestAnimationFrame(frame);
     };
 
-    const getCommitDuration = (remainingDistance, queued) => {
-      const speed = clamp(
-        Math.max(
-          queued ? config.commitMaxSpeedPxMs : config.commitBaseSpeedPxMs,
-          Math.abs(velocityY) * 1.45
-        ),
-        config.commitMinSpeedPxMs,
-        config.commitMaxSpeedPxMs
+    /* =========================================================
+       CINEMATIC COMMIT DURATION
+       ========================================================= */
+
+    const getCommitDuration = remainingDistance => {
+      const distanceRatio = clamp(
+        remainingDistance / Math.max(1, viewportHeight),
+        0,
+        1
       );
 
+      const releaseSpeed = Math.abs(velocityY);
+
+      const velocityReduction = clamp(
+        releaseSpeed * config.commitVelocityInfluence * 100,
+        0,
+        110
+      );
+
+      const duration =
+        config.commitMinDurationMs +
+        distanceRatio *
+          (config.commitDistanceDurationMs - config.commitMinDurationMs) -
+        velocityReduction;
+
       return clamp(
-        remainingDistance / Math.max(config.commitMinSpeedPxMs, speed),
+        duration,
         config.commitMinDurationMs,
         config.commitMaxDurationMs
       );
@@ -220,9 +250,9 @@
       animating = false;
 
       /*
-       * gallery.js owns recycling:
-       * PREVIOUS <- CURRENT <- NEXT
-       * and then returns the new layer references via setLayers().
+       * gallery.js owns PREVIOUS / CURRENT / NEXT recycling.
+       * After recycling it returns the current references
+       * through setLayers().
        */
       onCommit?.(direction);
 
@@ -230,17 +260,18 @@
 
       viewportHeight = getViewportHeight(viewport);
       renderTrack(0);
-      setWillChange(queue.length ? 'transform' : 'auto');
-
-      if (queue.length) requestAnimationFrame(runQueue);
+      prepareLayers(false);
     };
 
-    function commit(direction, queued = false) {
-      if (destroyed || !enabled || !hasLayers() || !isDirection(direction)) return false;
-
-      if (animating) {
-        enqueue(direction);
-        return true;
+    const commit = direction => {
+      if (
+        destroyed ||
+        !enabled ||
+        !hasLayers() ||
+        !isDirection(direction) ||
+        animating
+      ) {
+        return false;
       }
 
       if (raf) {
@@ -249,17 +280,24 @@
       }
 
       viewportHeight = getViewportHeight(viewport);
-      animating = true;
-      dragging = false;
 
       const destination = direction > 0 ? -viewportHeight : viewportHeight;
       const from = clamp(dragY, -viewportHeight, viewportHeight);
       const remainingDistance = Math.abs(destination - from);
-      const duration = getCommitDuration(remainingDistance, queued);
 
-      animate(from, destination, duration, easeOutQuint, () => finishCommit(direction));
+      animating = true;
+      dragging = false;
+
+      animate({
+        from,
+        to: destination,
+        duration: getCommitDuration(remainingDistance),
+        easing: cinematicEase,
+        complete: () => finishCommit(direction)
+      });
+
       return true;
-    }
+    };
 
     /* =========================================================
        SNAP BACK
@@ -273,9 +311,7 @@
       animating = false;
 
       renderTrack(0);
-      setWillChange(queue.length ? 'transform' : 'auto');
-
-      if (queue.length) requestAnimationFrame(runQueue);
+      prepareLayers(false);
     };
 
     const snapBack = () => {
@@ -287,18 +323,28 @@
       }
 
       viewportHeight = getViewportHeight(viewport);
-      animating = true;
-      dragging = false;
 
       const from = clamp(dragY, -viewportHeight, viewportHeight);
-      const ratio = Math.abs(from) / Math.max(1, viewportHeight);
+      const distanceRatio = Math.abs(from) / Math.max(1, viewportHeight);
+
       const duration = clamp(
-        config.snapMinDurationMs + ratio * 130,
+        config.snapMinDurationMs +
+          distanceRatio *
+            (config.snapMaxDurationMs - config.snapMinDurationMs),
         config.snapMinDurationMs,
         config.snapMaxDurationMs
       );
 
-      animate(from, 0, duration, easeOutCubic, finishSnapBack);
+      animating = true;
+      dragging = false;
+
+      animate({
+        from,
+        to: 0,
+        duration,
+        easing: easeOutCubic,
+        complete: finishSnapBack
+      });
     };
 
     /* =========================================================
@@ -308,7 +354,7 @@
     const beginGesture = (x, y) => {
       if (destroyed || !enabled || animating) return false;
 
-      cancelFrame();
+      cancelMotion();
       prepareMotion();
 
       dragging = true;
@@ -316,6 +362,7 @@
 
       startX = x;
       startY = y;
+
       lastY = y;
       lastTime = performance.now();
 
@@ -332,7 +379,12 @@
       const dy = y - startY;
 
       if (!axis) {
-        if (Math.abs(dx) < config.axisLockPx && Math.abs(dy) < config.axisLockPx) return false;
+        if (
+          Math.abs(dx) < config.axisLockPx &&
+          Math.abs(dy) < config.axisLockPx
+        ) {
+          return false;
+        }
 
         axis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
 
@@ -353,9 +405,10 @@
 
       lastY = y;
       lastTime = now;
-      dragY = clamp(dy, -viewportHeight, viewportHeight);
 
+      dragY = clamp(dy, -viewportHeight, viewportHeight);
       renderTrack(dragY);
+
       return true;
     };
 
@@ -363,12 +416,14 @@
       if (destroyed || !enabled || !dragging || animating) return;
 
       const distance = Math.abs(dragY);
+
       const threshold = Math.max(
         config.commitMinDistancePx,
         viewportHeight * config.commitDistanceRatio
       );
 
       const distanceCommit = distance >= threshold;
+
       const flickCommit =
         distance >= config.flickMinDistancePx &&
         Math.abs(velocityY) >= config.flickVelocityPxMs &&
@@ -389,16 +444,24 @@
         return;
       }
 
-      resetGesture();
+      resetGestureState();
       resetGeometry();
     };
 
     /* =========================================================
-       INPUT
+       EXCLUDED TARGET
        ========================================================= */
 
     const isExcludedTarget = target =>
-      Boolean(exclude && target instanceof Element && target.closest(exclude));
+      Boolean(
+        exclude &&
+        target instanceof Element &&
+        target.closest(exclude)
+      );
+
+    /* =========================================================
+       TOUCH
+       ========================================================= */
 
     const handleTouchStart = event => {
       if (
@@ -407,22 +470,37 @@
         animating ||
         event.touches.length !== 1 ||
         isExcludedTarget(event.target)
-      ) return;
+      ) {
+        return;
+      }
 
       const touch = event.touches[0];
       beginGesture(touch.clientX, touch.clientY);
     };
 
     const handleTouchMove = event => {
-      if (destroyed || !enabled || !dragging || event.touches.length !== 1) return;
+      if (
+        destroyed ||
+        !enabled ||
+        !dragging ||
+        event.touches.length !== 1
+      ) {
+        return;
+      }
 
       const touch = event.touches[0];
 
-      if (updateGesture(touch.clientX, touch.clientY)) event.preventDefault();
+      if (updateGesture(touch.clientX, touch.clientY)) {
+        event.preventDefault();
+      }
     };
 
     const handleTouchEnd = () => endGesture(false);
     const handleTouchCancel = () => endGesture(true);
+
+    /* =========================================================
+       POINTER
+       ========================================================= */
 
     const handlePointerDown = event => {
       if (
@@ -432,12 +510,15 @@
         event.pointerType === 'touch' ||
         event.button !== 0 ||
         isExcludedTarget(event.target)
-      ) return;
+      ) {
+        return;
+      }
 
       if (!beginGesture(event.clientX, event.clientY)) return;
 
       pointerId = event.pointerId;
       viewport.setPointerCapture?.(pointerId);
+
       event.preventDefault();
     };
 
@@ -448,9 +529,13 @@
         event.pointerType === 'touch' ||
         pointerId !== event.pointerId ||
         !dragging
-      ) return;
+      ) {
+        return;
+      }
 
-      if (updateGesture(event.clientX, event.clientY)) event.preventDefault();
+      if (updateGesture(event.clientX, event.clientY)) {
+        event.preventDefault();
+      }
     };
 
     const releasePointer = event => {
@@ -462,14 +547,24 @@
     };
 
     const handlePointerUp = event => {
-      if (event.pointerType === 'touch' || pointerId !== event.pointerId) return;
+      if (
+        event.pointerType === 'touch' ||
+        pointerId !== event.pointerId
+      ) {
+        return;
+      }
 
       releasePointer(event);
       endGesture(false);
     };
 
     const handlePointerCancel = event => {
-      if (event.pointerType === 'touch' || pointerId !== event.pointerId) return;
+      if (
+        event.pointerType === 'touch' ||
+        pointerId !== event.pointerId
+      ) {
+        return;
+      }
 
       releasePointer(event);
       endGesture(true);
@@ -508,9 +603,8 @@
 
       enabled = true;
       animating = false;
-      queue.length = 0;
 
-      resetGesture();
+      resetGestureState();
       resetGeometry();
     };
 
@@ -519,14 +613,13 @@
 
       enabled = false;
       animating = false;
-      queue.length = 0;
 
-      cancelFrame();
-      resetGesture();
+      cancelMotion();
+      resetGestureState();
 
       if (hasLayers()) {
         viewportHeight = getViewportHeight(viewport);
-        setWillChange('auto');
+        prepareLayers(false);
         renderTrack(0);
       }
     };
@@ -535,9 +628,8 @@
       if (destroyed) return;
 
       animating = false;
-      queue.length = 0;
 
-      resetGesture();
+      resetGestureState();
       resetGeometry();
     };
 
@@ -546,7 +638,9 @@
 
       viewportHeight = getViewportHeight(viewport);
 
-      if (!dragging && !animating) resetGeometry();
+      if (!dragging && !animating) {
+        resetGeometry();
+      }
     };
 
     const destroy = () => {
@@ -555,9 +649,8 @@
       enabled = false;
       destroyed = true;
       animating = false;
-      queue.length = 0;
 
-      cancelFrame();
+      cancelMotion();
 
       viewport.removeEventListener('touchstart', handleTouchStart);
       viewport.removeEventListener('touchmove', handleTouchMove);
@@ -581,11 +674,19 @@
       pointerId = null;
     };
 
+    /* =========================================================
+       INITIAL GEOMETRY
+       ========================================================= */
+
     viewportHeight = getViewportHeight(viewport);
     resetGeometry();
 
     return { setLayers, enable, disable, reset, resize, commit, destroy };
   };
+
+  /* =========================================================
+     GLOBAL
+     ========================================================= */
 
   window.VBSwipe = Object.freeze({ create });
 })();
