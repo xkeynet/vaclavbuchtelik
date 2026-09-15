@@ -25,6 +25,13 @@
     '/assets/icons/arrow-down.svg';
 
   /* =========================================================
+     ROUTES
+     ========================================================= */
+
+  const GALLERY_URL =
+    '/gallery/';
+
+  /* =========================================================
      MENU ICON PRELOAD
      ========================================================= */
 
@@ -453,41 +460,25 @@
       'main-menu__art'
     );
 
-    const text = createElement(
-      'p',
-      'main-menu__text'
+    const galleryLink = createElement(
+      'a',
+      'main-menu__art-gallery'
     );
 
-    text.textContent =
-      'Selected works by Václav Buchtelík.';
+    galleryLink.href =
+      GALLERY_URL;
 
-    const enterButton = createElement(
-      'button',
-      'main-menu__art-enter'
-    );
+    galleryLink.textContent =
+      'GALLERY';
 
-    enterButton.type = 'button';
-
-    enterButton.textContent = 'ENTER';
-
-    enterButton.setAttribute(
+    galleryLink.setAttribute(
       'aria-label',
-      'Enter My Art'
+      'Open Gallery'
     );
 
-    enterButton.addEventListener(
-      'click',
-      () => {
-        window.dispatchEvent(
-          new CustomEvent(
-            'vb:gallery-enter'
-          )
-        );
-      }
+    art.appendChild(
+      galleryLink
     );
-
-    art.appendChild(text);
-    art.appendChild(enterButton);
 
     return art;
   };
