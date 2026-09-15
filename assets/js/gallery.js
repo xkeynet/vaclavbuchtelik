@@ -4,6 +4,7 @@
    VÁCLAV BUCHTELÍK — GALLERY
    CINEMATIC FULLSCREEN ARTWORK SWIPE
    PREVIOUS + CURRENT + NEXT
+   RAF MOTION ENGINE
    ========================================================= */
 
 (() => {
@@ -14,15 +15,18 @@
   const AXIS_LOCK_PX = 6;
   const COMMIT_DISTANCE_RATIO = 0.18;
   const COMMIT_MIN_DISTANCE_PX = 54;
-  const FLICK_MIN_DISTANCE_PX = 24;
-  const FLICK_VELOCITY_PX_MS = 0.42;
+  const FLICK_MIN_DISTANCE_PX = 22;
+  const FLICK_VELOCITY_PX_MS = 0.38;
 
-  const COMMIT_DURATION_MIN_MS = 300;
-  const COMMIT_DURATION_MAX_MS = 460;
-  const SNAP_DURATION_MS = 320;
+  const VELOCITY_SMOOTHING = 0.34;
+  const COMMIT_BASE_SPEED_PX_MS = 1.45;
+  const COMMIT_MIN_SPEED_PX_MS = 1.10;
+  const COMMIT_MAX_SPEED_PX_MS = 3.20;
+  const COMMIT_MIN_DURATION_MS = 220;
+  const COMMIT_MAX_DURATION_MS = 520;
 
-  const COMMIT_CURVE = 'cubic-bezier(0.16,1,0.3,1)';
-  const SNAP_CURVE = 'cubic-bezier(0.22,1,0.36,1)';
+  const SNAP_MIN_DURATION_MS = 180;
+  const SNAP_MAX_DURATION_MS = 340;
 
   /* =========================================================
      STATE
@@ -50,7 +54,6 @@
 
   let startX = 0;
   let startY = 0;
-  let startTime = 0;
 
   let lastY = 0;
   let lastTime = 0;
@@ -60,7 +63,7 @@
   let viewportHeight = 1;
 
   let raf = 0;
-  let settleTimer = 0;
+  let motionToken = 0;
 
   let previousBodyOverflow = '';
   let previousHtmlOverflow = '';
@@ -74,21 +77,16 @@
 
   const createElement = (tag, className = '') => {
     const element = document.createElement(tag);
-
-    if (className) {
-      element.className = className;
-    }
-
+    if (className) element.className = className;
     return element;
   };
 
   const normalizeIndex = index => {
-    if (!art.length) {
-      return 0;
-    }
-
+    if (!art.length) return 0;
     return ((index % art.length) + art.length) % art.length;
   };
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
   const getViewportHeight = () => Math.max(
     1,
@@ -98,45 +96,46 @@
   );
 
   const setTransform = (layer, y) => {
-    if (!layer) {
-      return;
-    }
-
-    layer.style.transform = `translate3d(0,${Math.round(y * 100) / 100}px,0)`;
+    if (!layer) return;
+    layer.style.transform = `translate3d(0,${y.toFixed(3)}px,0)`;
   };
 
-  const setTransition = (layer, value) => {
-    if (layer) {
-      layer.style.transition = value;
-    }
+  const disableTransitions = () => {
+    [layerPrev, layerCurrent, layerNext].forEach(layer => {
+      if (!layer) return;
+      layer.style.transition = 'none';
+    });
+  };
+
+  const setWillChange = value => {
+    [layerPrev, layerCurrent, layerNext].forEach(layer => {
+      if (layer) layer.style.willChange = value;
+    });
   };
 
   const clearMotion = () => {
+    motionToken++;
+
     if (raf) {
       cancelAnimationFrame(raf);
       raf = 0;
     }
-
-    if (settleTimer) {
-      clearTimeout(settleTimer);
-      settleTimer = 0;
-    }
   };
 
-  const forceLayout = () => {
-    if (viewport) {
-      void viewport.offsetHeight;
-    }
-  };
+  /* =========================================================
+     EASING
+     ========================================================= */
+
+  const easeOutQuint = t => 1 - Math.pow(1 - t, 5);
+
+  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
 
   /* =========================================================
      IMAGE PRELOAD
      ========================================================= */
 
   const preloadArtwork = artwork => {
-    if (!artwork?.src || preloadedImages.has(artwork.src)) {
-      return;
-    }
+    if (!artwork?.src || preloadedImages.has(artwork.src)) return;
 
     const image = new Image();
 
@@ -151,9 +150,7 @@
   };
 
   const preloadAround = index => {
-    if (!art.length) {
-      return;
-    }
+    if (!art.length) return;
 
     [
       normalizeIndex(index - 2),
@@ -174,30 +171,11 @@
       `gallery-viewer__layer gallery-viewer__layer--${position}`
     );
 
-    const media = createElement(
-      'div',
-      'gallery-viewer__media'
-    );
-
-    const image = createElement(
-      'img',
-      'gallery-viewer__image'
-    );
-
-    const meta = createElement(
-      'div',
-      'gallery-viewer__meta'
-    );
-
-    const title = createElement(
-      'div',
-      'gallery-viewer__title'
-    );
-
-    const details = createElement(
-      'div',
-      'gallery-viewer__details'
-    );
+    const media = createElement('div', 'gallery-viewer__media');
+    const image = createElement('img', 'gallery-viewer__image');
+    const meta = createElement('div', 'gallery-viewer__meta');
+    const title = createElement('div', 'gallery-viewer__title');
+    const details = createElement('div', 'gallery-viewer__details');
 
     layer.dataset.position = position;
 
@@ -213,30 +191,17 @@
   };
 
   const setLayerArtwork = (layer, artwork, index) => {
-    if (!layer || !artwork) {
-      return;
-    }
+    if (!layer || !artwork) return;
 
-    const image = layer.querySelector(
-      '.gallery-viewer__image'
-    );
-
-    const title = layer.querySelector(
-      '.gallery-viewer__title'
-    );
-
-    const details = layer.querySelector(
-      '.gallery-viewer__details'
-    );
+    const image = layer.querySelector('.gallery-viewer__image');
+    const title = layer.querySelector('.gallery-viewer__title');
+    const details = layer.querySelector('.gallery-viewer__details');
 
     layer.dataset.index = String(index);
     layer.dataset.artId = String(artwork.id ?? '');
 
     if (image) {
-      const absoluteSrc = new URL(
-        artwork.src,
-        window.location.href
-      ).href;
+      const absoluteSrc = new URL(artwork.src, window.location.href).href;
 
       if (image.src !== absoluteSrc) {
         image.src = artwork.src;
@@ -245,9 +210,7 @@
       image.alt = artwork.title || '';
     }
 
-    if (title) {
-      title.textContent = artwork.title || '';
-    }
+    if (title) title.textContent = artwork.title || '';
 
     if (details) {
       details.textContent = artwork.details || '';
@@ -260,30 +223,14 @@
      ========================================================= */
 
   const syncContent = () => {
-    if (!art.length) {
-      return;
-    }
+    if (!art.length) return;
 
     const previousIndex = normalizeIndex(currentIndex - 1);
     const nextIndex = normalizeIndex(currentIndex + 1);
 
-    setLayerArtwork(
-      layerPrev,
-      art[previousIndex],
-      previousIndex
-    );
-
-    setLayerArtwork(
-      layerCurrent,
-      art[currentIndex],
-      currentIndex
-    );
-
-    setLayerArtwork(
-      layerNext,
-      art[nextIndex],
-      nextIndex
-    );
+    setLayerArtwork(layerPrev, art[previousIndex], previousIndex);
+    setLayerArtwork(layerCurrent, art[currentIndex], currentIndex);
+    setLayerArtwork(layerNext, art[nextIndex], nextIndex);
 
     preloadAround(currentIndex);
   };
@@ -292,51 +239,110 @@
      GEOMETRY
      ========================================================= */
 
+  const renderTrack = offset => {
+    const height = viewportHeight || getViewportHeight();
+
+    setTransform(layerPrev, -height + offset);
+    setTransform(layerCurrent, offset);
+    setTransform(layerNext, height + offset);
+  };
+
   const resetLayerGeometry = () => {
-    if (!layerPrev || !layerCurrent || !layerNext) {
-      return;
-    }
+    if (!layerPrev || !layerCurrent || !layerNext) return;
 
     viewportHeight = getViewportHeight();
 
-    [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      setTransition(layer, 'none');
-      layer.style.willChange = 'auto';
-    });
+    disableTransitions();
+    setWillChange('auto');
 
-    setTransform(layerPrev, -viewportHeight);
-    setTransform(layerCurrent, 0);
-    setTransform(layerNext, viewportHeight);
+    renderTrack(0);
   };
 
-  const prepareDragGeometry = () => {
+  const prepareMotionGeometry = () => {
     viewportHeight = getViewportHeight();
 
-    [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      setTransition(layer, 'none');
-      layer.style.willChange = 'transform';
-    });
+    disableTransitions();
+    setWillChange('transform');
   };
+
+  /* =========================================================
+     DRAG RENDER
+     ========================================================= */
 
   const renderDrag = () => {
     raf = 0;
 
-    if (!dragging || !verticalGesture) {
-      return;
-    }
+    if (!dragging || !verticalGesture) return;
 
     const height = viewportHeight || getViewportHeight();
-    const offset = Math.max(-height, Math.min(height, dragY));
-
-    setTransform(layerCurrent, offset);
-    setTransform(layerPrev, -height + offset);
-    setTransform(layerNext, height + offset);
+    renderTrack(clamp(dragY, -height, height));
   };
 
   const requestDragRender = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(renderDrag);
-    }
+    if (!raf) raf = requestAnimationFrame(renderDrag);
+  };
+
+  /* =========================================================
+     RAF ANIMATION
+     ========================================================= */
+
+  const animateTrack = ({
+    from,
+    to,
+    duration,
+    easing,
+    onComplete
+  }) => {
+    clearMotion();
+
+    const token = motionToken;
+    const startedAt = performance.now();
+    const distance = to - from;
+
+    disableTransitions();
+    setWillChange('transform');
+
+    const frame = now => {
+      if (
+        token !== motionToken ||
+        !isOpen ||
+        !isAnimating
+      ) {
+        raf = 0;
+        return;
+      }
+
+      const elapsed = now - startedAt;
+      const progress = clamp(elapsed / duration, 0, 1);
+      const eased = easing(progress);
+      const position = from + distance * eased;
+
+      dragY = position;
+      renderTrack(position);
+
+      if (progress < 1) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+
+      raf = 0;
+      dragY = to;
+      renderTrack(to);
+
+      requestAnimationFrame(() => {
+        if (
+          token !== motionToken ||
+          !isOpen ||
+          !isAnimating
+        ) {
+          return;
+        }
+
+        onComplete?.();
+      });
+    };
+
+    raf = requestAnimationFrame(frame);
   };
 
   /* =========================================================
@@ -370,8 +376,17 @@
       recycleBackward();
     }
 
+    /*
+       The recycled DOM layers are repositioned first.
+       Content is then updated while all transitions are disabled.
+    */
+
+    disableTransitions();
+
+    viewportHeight = getViewportHeight();
+    renderTrack(0);
+
     syncContent();
-    resetLayerGeometry();
 
     dragY = 0;
     velocityY = 0;
@@ -379,6 +394,8 @@
     axisLocked = false;
     verticalGesture = false;
     isAnimating = false;
+
+    setWillChange('auto');
 
     window.dispatchEvent(
       new CustomEvent('vb:gallery-slide-change', {
@@ -391,26 +408,33 @@
   };
 
   /* =========================================================
-     COMMIT
+     COMMIT DURATION
      ========================================================= */
 
-  const getCommitDuration = remainingDistance => {
-    const ratio = Math.min(
-      1,
+  const getCommitDuration = (remainingDistance, releaseVelocity) => {
+    const velocity = Math.abs(releaseVelocity);
+
+    const speed = clamp(
       Math.max(
-        0,
-        remainingDistance / Math.max(1, viewportHeight)
-      )
+        COMMIT_BASE_SPEED_PX_MS,
+        velocity * 1.35
+      ),
+      COMMIT_MIN_SPEED_PX_MS,
+      COMMIT_MAX_SPEED_PX_MS
     );
 
-    return Math.round(
-      COMMIT_DURATION_MIN_MS +
-      (
-        COMMIT_DURATION_MAX_MS -
-        COMMIT_DURATION_MIN_MS
-      ) * ratio
+    const duration = remainingDistance / speed;
+
+    return clamp(
+      duration,
+      COMMIT_MIN_DURATION_MS,
+      COMMIT_MAX_DURATION_MS
     );
   };
+
+  /* =========================================================
+     COMMIT
+     ========================================================= */
 
   const commit = direction => {
     if (
@@ -423,7 +447,10 @@
       return;
     }
 
-    clearMotion();
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
 
     isAnimating = true;
     dragging = false;
@@ -431,54 +458,21 @@
     const height = viewportHeight || getViewportHeight();
     const destination = direction > 0 ? -height : height;
 
-    const remainingDistance = Math.abs(
-      destination - dragY
-    );
+    const from = clamp(dragY, -height, height);
+    const remainingDistance = Math.abs(destination - from);
 
     const duration = getCommitDuration(
-      remainingDistance
+      remainingDistance,
+      velocityY
     );
 
-    const transition =
-      `transform ${duration}ms ${COMMIT_CURVE}`;
-
-    [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      layer.style.willChange = 'transform';
-      setTransition(layer, transition);
+    animateTrack({
+      from,
+      to: destination,
+      duration,
+      easing: easeOutQuint,
+      onComplete: () => finishCommit(direction)
     });
-
-    forceLayout();
-
-    requestAnimationFrame(() => {
-      if (!isAnimating || !isOpen) {
-        return;
-      }
-
-      setTransform(
-        layerCurrent,
-        destination
-      );
-
-      setTransform(
-        layerPrev,
-        -height + destination
-      );
-
-      setTransform(
-        layerNext,
-        height + destination
-      );
-    });
-
-    settleTimer = window.setTimeout(() => {
-      settleTimer = 0;
-
-      if (!isAnimating || !isOpen) {
-        return;
-      }
-
-      finishCommit(direction);
-    }, duration + 20);
   };
 
   /* =========================================================
@@ -486,7 +480,7 @@
      ========================================================= */
 
   const finishSnapBack = () => {
-    resetLayerGeometry();
+    disableTransitions();
 
     dragY = 0;
     velocityY = 0;
@@ -494,48 +488,41 @@
     axisLocked = false;
     verticalGesture = false;
     isAnimating = false;
+
+    renderTrack(0);
+    setWillChange('auto');
   };
 
   const snapBack = () => {
-    if (!isOpen || isAnimating) {
-      return;
-    }
+    if (!isOpen || isAnimating) return;
 
-    clearMotion();
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
 
     isAnimating = true;
     dragging = false;
 
     const height = viewportHeight || getViewportHeight();
-    const transition =
-      `transform ${SNAP_DURATION_MS}ms ${SNAP_CURVE}`;
+    const from = clamp(dragY, -height, height);
 
-    [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      layer.style.willChange = 'transform';
-      setTransition(layer, transition);
+    const distanceRatio = Math.abs(from) / Math.max(1, height);
+
+    const duration = clamp(
+      SNAP_MIN_DURATION_MS +
+      distanceRatio * 180,
+      SNAP_MIN_DURATION_MS,
+      SNAP_MAX_DURATION_MS
+    );
+
+    animateTrack({
+      from,
+      to: 0,
+      duration,
+      easing: easeOutCubic,
+      onComplete: finishSnapBack
     });
-
-    forceLayout();
-
-    requestAnimationFrame(() => {
-      if (!isAnimating || !isOpen) {
-        return;
-      }
-
-      setTransform(layerPrev, -height);
-      setTransform(layerCurrent, 0);
-      setTransform(layerNext, height);
-    });
-
-    settleTimer = window.setTimeout(() => {
-      settleTimer = 0;
-
-      if (!isOpen) {
-        return;
-      }
-
-      finishSnapBack();
-    }, SNAP_DURATION_MS + 20);
   };
 
   /* =========================================================
@@ -543,12 +530,10 @@
      ========================================================= */
 
   const beginGesture = (x, y) => {
-    if (!isOpen || isAnimating) {
-      return false;
-    }
+    if (!isOpen || isAnimating) return false;
 
     clearMotion();
-    prepareDragGeometry();
+    prepareMotionGeometry();
 
     dragging = true;
     axisLocked = false;
@@ -556,10 +541,9 @@
 
     startX = x;
     startY = y;
-    startTime = performance.now();
 
     lastY = y;
-    lastTime = startTime;
+    lastTime = performance.now();
 
     velocityY = 0;
     dragY = 0;
@@ -568,9 +552,7 @@
   };
 
   const updateGesture = (x, y) => {
-    if (!dragging || isAnimating) {
-      return false;
-    }
+    if (!dragging || isAnimating) return false;
 
     const rawX = x - startX;
     const rawY = y - startY;
@@ -584,8 +566,7 @@
       }
 
       axisLocked = true;
-      verticalGesture =
-        Math.abs(rawY) > Math.abs(rawX);
+      verticalGesture = Math.abs(rawY) > Math.abs(rawX);
 
       if (!verticalGesture) {
         dragging = false;
@@ -594,27 +575,22 @@
       }
     }
 
-    if (!verticalGesture) {
-      return false;
-    }
+    if (!verticalGesture) return false;
 
     const now = performance.now();
     const dt = Math.max(1, now - lastTime);
     const instantVelocity = (y - lastY) / dt;
 
     velocityY =
-      velocityY * 0.72 +
-      instantVelocity * 0.28;
+      velocityY * (1 - VELOCITY_SMOOTHING) +
+      instantVelocity * VELOCITY_SMOOTHING;
 
     lastY = y;
     lastTime = now;
 
     const height = viewportHeight || getViewportHeight();
 
-    dragY = Math.max(
-      -height,
-      Math.min(height, rawY)
-    );
+    dragY = clamp(rawY, -height, height);
 
     requestDragRender();
 
@@ -622,14 +598,15 @@
   };
 
   const endGesture = cancelled => {
-    if (!dragging || isAnimating) {
-      return;
-    }
+    if (!dragging || isAnimating) return;
 
     if (raf) {
       cancelAnimationFrame(raf);
       raf = 0;
-      renderDrag();
+
+      if (verticalGesture) {
+        renderTrack(dragY);
+      }
     }
 
     const distance = Math.abs(dragY);
@@ -640,16 +617,14 @@
       height * COMMIT_DISTANCE_RATIO
     );
 
-    const distanceCommit =
-      distance >= distanceThreshold;
+    const distanceCommit = distance >= distanceThreshold;
 
     const flickCommit =
       distance >= FLICK_MIN_DISTANCE_PX &&
       Math.abs(velocityY) >= FLICK_VELOCITY_PX_MS &&
       Math.sign(velocityY) === Math.sign(dragY);
 
-    const direction =
-      dragY < 0 ? 1 : -1;
+    const direction = dragY < 0 ? 1 : -1;
 
     if (
       !cancelled &&
@@ -713,9 +688,7 @@
       touch.clientY
     );
 
-    if (consumed) {
-      event.preventDefault();
-    }
+    if (consumed) event.preventDefault();
   };
 
   const handleTouchEnd = () => {
@@ -741,20 +714,11 @@
       return;
     }
 
-    if (
-      !beginGesture(
-        event.clientX,
-        event.clientY
-      )
-    ) {
-      return;
-    }
+    if (!beginGesture(event.clientX, event.clientY)) return;
 
     pointerId = event.pointerId;
 
-    viewport?.setPointerCapture?.(
-      event.pointerId
-    );
+    viewport?.setPointerCapture?.(event.pointerId);
 
     event.preventDefault();
   };
@@ -774,20 +738,12 @@
       event.clientY
     );
 
-    if (consumed) {
-      event.preventDefault();
-    }
+    if (consumed) event.preventDefault();
   };
 
   const releasePointer = event => {
-    if (
-      viewport?.hasPointerCapture?.(
-        event.pointerId
-      )
-    ) {
-      viewport.releasePointerCapture(
-        event.pointerId
-      );
+    if (viewport?.hasPointerCapture?.(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
     }
 
     pointerId = null;
@@ -838,24 +794,18 @@
       'Back to menu'
     );
 
-    image.src =
-      '/assets/icons/arrow-left.svg';
-
+    image.src = '/assets/icons/arrow-left.svg';
     image.alt = '';
     image.decoding = 'async';
     image.draggable = false;
 
     button.appendChild(image);
 
-    button.addEventListener(
-      'click',
-      event => {
-        event.preventDefault();
-        event.stopPropagation();
-
-        closeGallery();
-      }
-    );
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeGallery();
+    });
 
     return button;
   };
@@ -865,9 +815,7 @@
      ========================================================= */
 
   const buildGallery = () => {
-    if (gallery) {
-      return;
-    }
+    if (gallery) return;
 
     gallery = createElement(
       'section',
@@ -962,21 +910,18 @@
      ========================================================= */
 
   const keyboardCommit = direction => {
-    if (!isOpen || isAnimating) {
-      return;
-    }
+    if (!isOpen || isAnimating) return;
 
     viewportHeight = getViewportHeight();
     dragY = 0;
+    velocityY = 0;
 
-    prepareDragGeometry();
+    prepareMotionGeometry();
     commit(direction);
   };
 
   const handleKeyDown = event => {
-    if (!isOpen) {
-      return;
-    }
+    if (!isOpen) return;
 
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -1021,17 +966,11 @@
 
     buildGallery();
 
-    if (!gallery) {
-      return;
-    }
+    if (!gallery) return;
 
-    const parsedIndex = Number(
-      requestedIndex
-    );
+    const parsedIndex = Number(requestedIndex);
 
-    currentIndex = Number.isInteger(
-      parsedIndex
-    )
+    currentIndex = Number.isInteger(parsedIndex)
       ? normalizeIndex(parsedIndex)
       : 0;
 
@@ -1060,14 +999,9 @@
     previousBodyTouchAction =
       document.body.style.touchAction;
 
-    document.body.style.overflow =
-      'hidden';
-
-    document.documentElement.style.overflow =
-      'hidden';
-
-    document.body.style.touchAction =
-      'none';
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
 
     gallery.setAttribute(
       'aria-hidden',
@@ -1086,9 +1020,7 @@
     );
 
     requestAnimationFrame(() => {
-      if (!gallery || !isOpen) {
-        return;
-      }
+      if (!gallery || !isOpen) return;
 
       gallery.classList.add(
         'is-visible'
@@ -1110,9 +1042,7 @@
      ========================================================= */
 
   function closeGallery() {
-    if (!gallery || !isOpen) {
-      return;
-    }
+    if (!gallery || !isOpen) return;
 
     clearMotion();
 
@@ -1146,9 +1076,7 @@
       previousBodyTouchAction;
 
     window.setTimeout(() => {
-      if (!gallery || isOpen) {
-        return;
-      }
+      if (!gallery || isOpen) return;
 
       gallery.classList.remove(
         'is-open'
@@ -1229,9 +1157,7 @@
      ========================================================= */
 
   const recoverVisibleState = () => {
-    if (!isOpen) {
-      return;
-    }
+    if (!isOpen) return;
 
     clearMotion();
 
