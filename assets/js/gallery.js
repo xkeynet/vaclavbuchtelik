@@ -8,7 +8,7 @@
 
 (() => {
   let art = [], gallery = null, viewport = null, layerPrev = null, layerCurrent = null, layerNext = null;
-  let currentIndex = 0, isOpen = false, swipeEngine = null;
+  let currentIndex = 0, isOpen = false, opening = false, openToken = 0, swipeEngine = null;
   let previousBodyOverflow = '', previousHtmlOverflow = '', previousBodyTouchAction = '';
   const preloadedImages = new Map();
 
@@ -20,19 +20,78 @@
 
   const normalizeIndex = index => art.length ? ((index % art.length) + art.length) % art.length : 0;
 
+  /* =========================================================
+     IMAGE PRELOAD / DECODE
+     ========================================================= */
+
   const preloadArtwork = artwork => {
-    if (!artwork?.src || preloadedImages.has(artwork.src)) return;
+    if (!artwork?.src) return null;
+
+    if (preloadedImages.has(artwork.src)) return preloadedImages.get(artwork.src);
+
     const image = new Image();
     image.decoding = 'async';
     image.src = artwork.src;
+
     preloadedImages.set(artwork.src, image);
     image.decode?.().catch(() => {});
+
+    return image;
   };
 
   const preloadAround = index => {
     if (!art.length) return;
     [-3, -2, -1, 0, 1, 2, 3].forEach(offset => preloadArtwork(art[normalizeIndex(index + offset)]));
   };
+
+  const decodeArtwork = artwork => {
+    const image = preloadArtwork(artwork);
+    if (!image) return Promise.resolve();
+
+    if (image.complete && image.naturalWidth > 0) {
+      if (typeof image.decode !== 'function') return Promise.resolve();
+      return image.decode().catch(() => {});
+    }
+
+    if (typeof image.decode === 'function') return image.decode().catch(() => {});
+
+    return new Promise(resolve => {
+      image.addEventListener('load', resolve, { once: true });
+      image.addEventListener('error', resolve, { once: true });
+    });
+  };
+
+  /* =========================================================
+     BACK CONTROL
+     BELONGS TO EACH SWIPE LAYER
+     ========================================================= */
+
+  const createBackButton = () => {
+    const button = el('button', 'gallery-viewer__back');
+    const image = el('img', 'gallery-viewer__back-icon');
+
+    button.type = 'button';
+    button.setAttribute('aria-label', 'Back to menu');
+
+    image.src = '/assets/icons/arrow-left.svg';
+    image.alt = '';
+    image.decoding = 'async';
+    image.draggable = false;
+
+    button.appendChild(image);
+
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeGallery();
+    });
+
+    return button;
+  };
+
+  /* =========================================================
+     LAYER
+     ========================================================= */
 
   const createLayer = position => {
     const layer = el('article', `gallery-viewer__layer gallery-viewer__layer--${position}`);
@@ -41,18 +100,24 @@
     const meta = el('div', 'gallery-viewer__meta');
     const title = el('div', 'gallery-viewer__title');
     const details = el('div', 'gallery-viewer__details');
+    const back = createBackButton();
 
     layer.dataset.position = position;
+
     image.alt = '';
     image.decoding = 'async';
     image.draggable = false;
 
     media.appendChild(image);
     meta.append(title, details);
-    layer.append(media, meta);
+    layer.append(media, meta, back);
 
     return layer;
   };
+
+  /* =========================================================
+     ARTWORK CONTENT
+     ========================================================= */
 
   const setLayerArtwork = (layer, artwork, index) => {
     if (!layer || !artwork) return;
@@ -91,6 +156,10 @@
     preloadAround(currentIndex);
   };
 
+  /* =========================================================
+     GEOMETRY
+     ========================================================= */
+
   const resetLayerGeometry = () => {
     if (!layerPrev || !layerCurrent || !layerNext) return;
 
@@ -103,26 +172,38 @@
     layerNext.style.transform = 'translate3d(0,100%,0)';
   };
 
+  /* =========================================================
+     EVENTS
+     ========================================================= */
+
   const dispatchSlideChange = () => {
     window.dispatchEvent(new CustomEvent('vb:gallery-slide-change', {
       detail: { index: currentIndex, artwork: art[currentIndex] }
     }));
   };
 
+  /* =========================================================
+     SWIPE COMMIT
+     ========================================================= */
+
   const handleSwipeCommit = direction => {
     if (!isOpen || !art.length) return;
 
     if (direction > 0) {
       const oldPrevious = layerPrev;
+
       layerPrev = layerCurrent;
       layerCurrent = layerNext;
       layerNext = oldPrevious;
+
       currentIndex = normalizeIndex(currentIndex + 1);
     } else {
       const oldNext = layerNext;
+
       layerNext = layerCurrent;
       layerCurrent = layerPrev;
       layerPrev = oldNext;
+
       currentIndex = normalizeIndex(currentIndex - 1);
     }
 
@@ -139,6 +220,10 @@
     dispatchSlideChange();
   };
 
+  /* =========================================================
+     SWIPE ENGINE
+     ========================================================= */
+
   const initializeSwipeEngine = () => {
     if (swipeEngine) return true;
 
@@ -150,7 +235,11 @@
     try {
       swipeEngine = window.VBSwipe.create({
         viewport,
-        layers: { previous: layerPrev, current: layerCurrent, next: layerNext },
+        layers: {
+          previous: layerPrev,
+          current: layerCurrent,
+          next: layerNext
+        },
         exclude: '.gallery-viewer__back',
         onCommit: handleSwipeCommit
       });
@@ -183,6 +272,7 @@
 
   const deactivateSwipeEngine = () => {
     if (!swipeEngine) return;
+
     try {
       swipeEngine.disable?.();
       swipeEngine.reset?.();
@@ -191,10 +281,17 @@
     }
   };
 
-  function closeGallery() {
-    if (!gallery || !isOpen) return;
+  /* =========================================================
+     CLOSE
+     ========================================================= */
 
+  function closeGallery() {
+    if (!gallery || (!isOpen && !opening)) return;
+
+    openToken++;
+    opening = false;
     isOpen = false;
+
     deactivateSwipeEngine();
 
     gallery.classList.remove('is-visible');
@@ -205,39 +302,32 @@
     document.body.style.touchAction = previousBodyTouchAction;
 
     window.setTimeout(() => {
-      if (!gallery || isOpen) return;
+      if (!gallery || isOpen || opening) return;
+
       gallery.classList.remove('is-open');
       gallery.setAttribute('aria-hidden', 'true');
+
       resetLayerGeometry();
     }, 220);
 
+    /*
+     * Main navigation owns its own state.
+     * It receives one explicit request to return to
+     * the initial menu state after leaving Gallery.
+     */
+    window.dispatchEvent(new CustomEvent('vb:main-reset'));
+
     window.dispatchEvent(new CustomEvent('vb:gallery-closed', {
-      detail: { index: currentIndex, artwork: art[currentIndex] }
+      detail: {
+        index: currentIndex,
+        artwork: art[currentIndex]
+      }
     }));
   }
 
-  const createBackButton = () => {
-    const button = el('button', 'gallery-viewer__back');
-    const image = el('img', 'gallery-viewer__back-icon');
-
-    button.type = 'button';
-    button.setAttribute('aria-label', 'Back to menu');
-
-    image.src = '/assets/icons/arrow-left.svg';
-    image.alt = '';
-    image.decoding = 'async';
-    image.draggable = false;
-
-    button.appendChild(image);
-
-    button.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeGallery();
-    });
-
-    return button;
-  };
+  /* =========================================================
+     BUILD
+     ========================================================= */
 
   const buildGallery = () => {
     if (gallery) return;
@@ -248,25 +338,36 @@
     gallery.setAttribute('aria-hidden', 'true');
 
     viewport = el('div', 'gallery-viewer__viewport');
+
     layerPrev = createLayer('previous');
     layerCurrent = createLayer('current');
     layerNext = createLayer('next');
 
     viewport.append(layerPrev, layerCurrent, layerNext);
-    gallery.append(viewport, createBackButton());
+    gallery.appendChild(viewport);
+
     document.body.appendChild(gallery);
 
     resetLayerGeometry();
   };
 
+  /* =========================================================
+     FALLBACK
+     ========================================================= */
+
   const fallbackCommit = direction => {
     if (!isOpen || !art.length) return;
 
     currentIndex = normalizeIndex(currentIndex + direction);
+
     syncContent();
     resetLayerGeometry();
     dispatchSlideChange();
   };
+
+  /* =========================================================
+     KEYBOARD
+     ========================================================= */
 
   const handleKeyDown = event => {
     if (!isOpen) return;
@@ -279,19 +380,29 @@
 
     if (event.key === 'ArrowDown' || event.key === 'PageDown') {
       event.preventDefault();
+
       if (swipeEngine?.commit) swipeEngine.commit(1);
       else fallbackCommit(1);
+
       return;
     }
 
     if (event.key === 'ArrowUp' || event.key === 'PageUp') {
       event.preventDefault();
+
       if (swipeEngine?.commit) swipeEngine.commit(-1);
       else fallbackCommit(-1);
     }
   };
 
-  const openGallery = (requestedIndex = 0) => {
+  /* =========================================================
+     OPEN
+     PREPARE -> DECODE -> PAINT -> REVEAL
+     ========================================================= */
+
+  const openGallery = async (requestedIndex = 0) => {
+    if (isOpen || opening) return;
+
     art = Array.isArray(window.ART) ? window.ART : [];
 
     if (!art.length) {
@@ -302,11 +413,46 @@
     buildGallery();
     if (!gallery) return;
 
+    opening = true;
+
+    const token = ++openToken;
     const parsedIndex = Number(requestedIndex);
-    currentIndex = Number.isInteger(parsedIndex) ? normalizeIndex(parsedIndex) : 0;
+
+    currentIndex = Number.isInteger(parsedIndex)
+      ? normalizeIndex(parsedIndex)
+      : 0;
+
+    /*
+     * Gallery stays fully hidden while all three layers
+     * receive their final content and geometry.
+     */
+    gallery.classList.remove('is-visible', 'is-open');
+    gallery.setAttribute('aria-hidden', 'true');
 
     syncContent();
     resetLayerGeometry();
+
+    /*
+     * The CURRENT artwork must be decoded before the viewer
+     * is allowed to become visible. This removes the opening
+     * frame in which the underlying main artwork could flash.
+     */
+    await decodeArtwork(art[currentIndex]);
+
+    if (
+      token !== openToken ||
+      !gallery ||
+      !opening
+    ) {
+      return;
+    }
+
+    /*
+     * Force the prepared CURRENT layer into layout while the
+     * gallery itself is still hidden.
+     */
+    resetLayerGeometry();
+    void gallery.offsetHeight;
 
     previousBodyOverflow = document.body.style.overflow;
     previousHtmlOverflow = document.documentElement.style.overflow;
@@ -320,11 +466,39 @@
     gallery.classList.add('is-open');
 
     /*
-     * CRITICAL:
-     * Gallery is now open BEFORE swipe initialization and it remains open
-     * even if the external swipe engine is unavailable or throws.
+     * First paint: gallery exists above the main view,
+     * but is not yet visually revealed.
      */
+    await new Promise(resolve => requestAnimationFrame(resolve));
+
+    if (
+      token !== openToken ||
+      !gallery ||
+      !opening
+    ) {
+      return;
+    }
+
+    resetLayerGeometry();
+
+    /*
+     * Second paint: reveal only after the prepared artwork
+     * has occupied the gallery layer.
+     */
+    await new Promise(resolve => requestAnimationFrame(resolve));
+
+    if (
+      token !== openToken ||
+      !gallery ||
+      !opening
+    ) {
+      return;
+    }
+
+    opening = false;
     isOpen = true;
+
+    gallery.classList.add('is-visible');
 
     activateSwipeEngine();
 
@@ -333,26 +507,47 @@
 
     requestAnimationFrame(() => {
       if (!gallery || !isOpen) return;
-      gallery.classList.add('is-visible');
+
       resetLayerGeometry();
       swipeEngine?.resize?.();
     });
 
     window.dispatchEvent(new CustomEvent('vb:gallery-opened', {
-      detail: { index: currentIndex, artwork: art[currentIndex] }
+      detail: {
+        index: currentIndex,
+        artwork: art[currentIndex]
+      }
     }));
   };
 
+  /* =========================================================
+     OPEN REQUEST
+     ========================================================= */
+
   const handleGalleryOpenRequest = event => {
     const requestedIndex = Number(event.detail?.index);
-    openGallery(Number.isInteger(requestedIndex) ? requestedIndex : 0);
+
+    openGallery(
+      Number.isInteger(requestedIndex)
+        ? requestedIndex
+        : 0
+    );
   };
+
+  /* =========================================================
+     RESIZE
+     ========================================================= */
 
   const handleResize = () => {
     if (!gallery || !isOpen) return;
+
     resetLayerGeometry();
     swipeEngine?.resize?.();
   };
+
+  /* =========================================================
+     RECOVERY
+     ========================================================= */
 
   const recoverVisibleState = () => {
     if (!isOpen) return;
@@ -370,6 +565,10 @@
     swipeEngine?.resize?.();
   };
 
+  /* =========================================================
+     GLOBAL EVENTS
+     ========================================================= */
+
   window.addEventListener('vb:gallery-open-view', handleGalleryOpenRequest);
   window.addEventListener('resize', handleResize, { passive: true });
   window.addEventListener('orientationchange', handleResize, { passive: true });
@@ -381,7 +580,13 @@
 
   window.addEventListener('pageshow', recoverVisibleState, { passive: true });
 
+  /* =========================================================
+     CLEANUP
+     ========================================================= */
+
   window.addEventListener('pagehide', () => {
+    openToken++;
+
     window.removeEventListener('vb:gallery-open-view', handleGalleryOpenRequest);
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('resize', handleResize);
@@ -395,6 +600,7 @@
     }
 
     swipeEngine = null;
+    opening = false;
     isOpen = false;
   }, { once: true });
 })();
