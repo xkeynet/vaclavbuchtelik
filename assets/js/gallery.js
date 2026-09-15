@@ -4,7 +4,7 @@
    VÁCLAV BUCHTELÍK — GALLERY
    CINEMATIC FULLSCREEN ARTWORK SWIPE
    PREVIOUS + CURRENT + NEXT
-   RAF MOTION ENGINE
+   CONTINUOUS HIGH-FREQUENCY RAF ENGINE
    ========================================================= */
 
 (() => {
@@ -12,21 +12,26 @@
      MOTION
      ========================================================= */
 
-  const AXIS_LOCK_PX = 6;
-  const COMMIT_DISTANCE_RATIO = 0.18;
-  const COMMIT_MIN_DISTANCE_PX = 54;
-  const FLICK_MIN_DISTANCE_PX = 22;
-  const FLICK_VELOCITY_PX_MS = 0.38;
+  const AXIS_LOCK_PX = 3;
+  const COMMIT_DISTANCE_RATIO = 0.10;
+  const COMMIT_MIN_DISTANCE_PX = 28;
+  const FLICK_MIN_DISTANCE_PX = 10;
+  const FLICK_VELOCITY_PX_MS = 0.20;
 
-  const VELOCITY_SMOOTHING = 0.34;
-  const COMMIT_BASE_SPEED_PX_MS = 1.45;
-  const COMMIT_MIN_SPEED_PX_MS = 1.10;
-  const COMMIT_MAX_SPEED_PX_MS = 3.20;
-  const COMMIT_MIN_DURATION_MS = 220;
-  const COMMIT_MAX_DURATION_MS = 520;
+  const VELOCITY_SMOOTHING = 0.42;
+  const COMMIT_BASE_SPEED_PX_MS = 2.10;
+  const COMMIT_MIN_SPEED_PX_MS = 1.65;
+  const COMMIT_MAX_SPEED_PX_MS = 5.20;
+  const COMMIT_MIN_DURATION_MS = 150;
+  const COMMIT_MAX_DURATION_MS = 380;
 
-  const SNAP_MIN_DURATION_MS = 180;
-  const SNAP_MAX_DURATION_MS = 340;
+  const SNAP_MIN_DURATION_MS = 150;
+  const SNAP_MAX_DURATION_MS = 280;
+
+  const QUEUE_AXIS_LOCK_PX = 3;
+  const QUEUE_FLICK_MIN_DISTANCE_PX = 9;
+  const QUEUE_COMMIT_MIN_DISTANCE_PX = 22;
+  const MAX_QUEUED_SWIPES = 12;
 
   /* =========================================================
      STATE
@@ -65,6 +70,19 @@
   let raf = 0;
   let motionToken = 0;
 
+  let queueTracking = false;
+  let queueAxisLocked = false;
+  let queueVerticalGesture = false;
+
+  let queueStartX = 0;
+  let queueStartY = 0;
+  let queueLastY = 0;
+  let queueLastTime = 0;
+  let queueVelocityY = 0;
+  let queueDragY = 0;
+
+  const swipeQueue = [];
+
   let previousBodyOverflow = '';
   let previousHtmlOverflow = '';
   let previousBodyTouchAction = '';
@@ -86,7 +104,8 @@
     return ((index % art.length) + art.length) % art.length;
   };
 
-  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const clamp = (value, min, max) =>
+    Math.max(min, Math.min(max, value));
 
   const getViewportHeight = () => Math.max(
     1,
@@ -97,7 +116,8 @@
 
   const setTransform = (layer, y) => {
     if (!layer) return;
-    layer.style.transform = `translate3d(0,${y.toFixed(3)}px,0)`;
+    layer.style.transform =
+      `translate3d(0,${y.toFixed(3)}px,0)`;
   };
 
   const disableTransitions = () => {
@@ -126,23 +146,33 @@
      EASING
      ========================================================= */
 
-  const easeOutQuint = t => 1 - Math.pow(1 - t, 5);
+  const easeOutQuint = t =>
+    1 - Math.pow(1 - t, 5);
 
-  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+  const easeOutCubic = t =>
+    1 - Math.pow(1 - t, 3);
 
   /* =========================================================
      IMAGE PRELOAD
      ========================================================= */
 
   const preloadArtwork = artwork => {
-    if (!artwork?.src || preloadedImages.has(artwork.src)) return;
+    if (
+      !artwork?.src ||
+      preloadedImages.has(artwork.src)
+    ) {
+      return;
+    }
 
     const image = new Image();
 
     image.decoding = 'async';
     image.src = artwork.src;
 
-    preloadedImages.set(artwork.src, image);
+    preloadedImages.set(
+      artwork.src,
+      image
+    );
 
     if (typeof image.decode === 'function') {
       image.decode().catch(() => {});
@@ -153,11 +183,13 @@
     if (!art.length) return;
 
     [
+      normalizeIndex(index - 3),
       normalizeIndex(index - 2),
       normalizeIndex(index - 1),
       normalizeIndex(index),
       normalizeIndex(index + 1),
-      normalizeIndex(index + 2)
+      normalizeIndex(index + 2),
+      normalizeIndex(index + 3)
     ].forEach(i => preloadArtwork(art[i]));
   };
 
@@ -171,11 +203,30 @@
       `gallery-viewer__layer gallery-viewer__layer--${position}`
     );
 
-    const media = createElement('div', 'gallery-viewer__media');
-    const image = createElement('img', 'gallery-viewer__image');
-    const meta = createElement('div', 'gallery-viewer__meta');
-    const title = createElement('div', 'gallery-viewer__title');
-    const details = createElement('div', 'gallery-viewer__details');
+    const media = createElement(
+      'div',
+      'gallery-viewer__media'
+    );
+
+    const image = createElement(
+      'img',
+      'gallery-viewer__image'
+    );
+
+    const meta = createElement(
+      'div',
+      'gallery-viewer__meta'
+    );
+
+    const title = createElement(
+      'div',
+      'gallery-viewer__title'
+    );
+
+    const details = createElement(
+      'div',
+      'gallery-viewer__details'
+    );
 
     layer.dataset.position = position;
 
@@ -190,18 +241,34 @@
     return layer;
   };
 
-  const setLayerArtwork = (layer, artwork, index) => {
+  const setLayerArtwork = (
+    layer,
+    artwork,
+    index
+  ) => {
     if (!layer || !artwork) return;
 
-    const image = layer.querySelector('.gallery-viewer__image');
-    const title = layer.querySelector('.gallery-viewer__title');
-    const details = layer.querySelector('.gallery-viewer__details');
+    const image = layer.querySelector(
+      '.gallery-viewer__image'
+    );
+
+    const title = layer.querySelector(
+      '.gallery-viewer__title'
+    );
+
+    const details = layer.querySelector(
+      '.gallery-viewer__details'
+    );
 
     layer.dataset.index = String(index);
-    layer.dataset.artId = String(artwork.id ?? '');
+    layer.dataset.artId =
+      String(artwork.id ?? '');
 
     if (image) {
-      const absoluteSrc = new URL(artwork.src, window.location.href).href;
+      const absoluteSrc = new URL(
+        artwork.src,
+        window.location.href
+      ).href;
 
       if (image.src !== absoluteSrc) {
         image.src = artwork.src;
@@ -210,11 +277,17 @@
       image.alt = artwork.title || '';
     }
 
-    if (title) title.textContent = artwork.title || '';
+    if (title) {
+      title.textContent =
+        artwork.title || '';
+    }
 
     if (details) {
-      details.textContent = artwork.details || '';
-      details.hidden = !artwork.details;
+      details.textContent =
+        artwork.details || '';
+
+      details.hidden =
+        !artwork.details;
     }
   };
 
@@ -225,12 +298,29 @@
   const syncContent = () => {
     if (!art.length) return;
 
-    const previousIndex = normalizeIndex(currentIndex - 1);
-    const nextIndex = normalizeIndex(currentIndex + 1);
+    const previousIndex =
+      normalizeIndex(currentIndex - 1);
 
-    setLayerArtwork(layerPrev, art[previousIndex], previousIndex);
-    setLayerArtwork(layerCurrent, art[currentIndex], currentIndex);
-    setLayerArtwork(layerNext, art[nextIndex], nextIndex);
+    const nextIndex =
+      normalizeIndex(currentIndex + 1);
+
+    setLayerArtwork(
+      layerPrev,
+      art[previousIndex],
+      previousIndex
+    );
+
+    setLayerArtwork(
+      layerCurrent,
+      art[currentIndex],
+      currentIndex
+    );
+
+    setLayerArtwork(
+      layerNext,
+      art[nextIndex],
+      nextIndex
+    );
 
     preloadAround(currentIndex);
   };
@@ -240,17 +330,37 @@
      ========================================================= */
 
   const renderTrack = offset => {
-    const height = viewportHeight || getViewportHeight();
+    const height =
+      viewportHeight ||
+      getViewportHeight();
 
-    setTransform(layerPrev, -height + offset);
-    setTransform(layerCurrent, offset);
-    setTransform(layerNext, height + offset);
+    setTransform(
+      layerPrev,
+      -height + offset
+    );
+
+    setTransform(
+      layerCurrent,
+      offset
+    );
+
+    setTransform(
+      layerNext,
+      height + offset
+    );
   };
 
   const resetLayerGeometry = () => {
-    if (!layerPrev || !layerCurrent || !layerNext) return;
+    if (
+      !layerPrev ||
+      !layerCurrent ||
+      !layerNext
+    ) {
+      return;
+    }
 
-    viewportHeight = getViewportHeight();
+    viewportHeight =
+      getViewportHeight();
 
     disableTransitions();
     setWillChange('auto');
@@ -259,7 +369,8 @@
   };
 
   const prepareMotionGeometry = () => {
-    viewportHeight = getViewportHeight();
+    viewportHeight =
+      getViewportHeight();
 
     disableTransitions();
     setWillChange('transform');
@@ -272,14 +383,199 @@
   const renderDrag = () => {
     raf = 0;
 
-    if (!dragging || !verticalGesture) return;
+    if (
+      !dragging ||
+      !verticalGesture ||
+      isAnimating
+    ) {
+      return;
+    }
 
-    const height = viewportHeight || getViewportHeight();
-    renderTrack(clamp(dragY, -height, height));
+    const height =
+      viewportHeight ||
+      getViewportHeight();
+
+    renderTrack(
+      clamp(
+        dragY,
+        -height,
+        height
+      )
+    );
   };
 
   const requestDragRender = () => {
-    if (!raf) raf = requestAnimationFrame(renderDrag);
+    if (!raf) {
+      raf = requestAnimationFrame(
+        renderDrag
+      );
+    }
+  };
+
+  /* =========================================================
+     QUEUE
+     ========================================================= */
+
+  const resetQueueGesture = () => {
+    queueTracking = false;
+    queueAxisLocked = false;
+    queueVerticalGesture = false;
+
+    queueStartX = 0;
+    queueStartY = 0;
+    queueLastY = 0;
+    queueLastTime = 0;
+    queueVelocityY = 0;
+    queueDragY = 0;
+  };
+
+  const clearSwipeQueue = () => {
+    swipeQueue.length = 0;
+    resetQueueGesture();
+  };
+
+  const enqueueSwipe = direction => {
+    if (
+      direction !== 1 &&
+      direction !== -1
+    ) {
+      return;
+    }
+
+    if (
+      swipeQueue.length >=
+      MAX_QUEUED_SWIPES
+    ) {
+      swipeQueue.shift();
+    }
+
+    swipeQueue.push(direction);
+
+    const projectedIndex =
+      normalizeIndex(
+        currentIndex +
+        swipeQueue.reduce(
+          (sum, dir) => sum + dir,
+          0
+        )
+      );
+
+    preloadAround(projectedIndex);
+  };
+
+  const beginQueuedGesture = (x, y) => {
+    queueTracking = true;
+    queueAxisLocked = false;
+    queueVerticalGesture = false;
+
+    queueStartX = x;
+    queueStartY = y;
+
+    queueLastY = y;
+    queueLastTime =
+      performance.now();
+
+    queueVelocityY = 0;
+    queueDragY = 0;
+  };
+
+  const updateQueuedGesture = (x, y) => {
+    if (!queueTracking) return false;
+
+    const rawX =
+      x - queueStartX;
+
+    const rawY =
+      y - queueStartY;
+
+    if (!queueAxisLocked) {
+      if (
+        Math.abs(rawX) <
+          QUEUE_AXIS_LOCK_PX &&
+        Math.abs(rawY) <
+          QUEUE_AXIS_LOCK_PX
+      ) {
+        return false;
+      }
+
+      queueAxisLocked = true;
+
+      queueVerticalGesture =
+        Math.abs(rawY) >
+        Math.abs(rawX);
+
+      if (!queueVerticalGesture) {
+        resetQueueGesture();
+        return false;
+      }
+    }
+
+    if (!queueVerticalGesture) {
+      return false;
+    }
+
+    const now =
+      performance.now();
+
+    const dt =
+      Math.max(
+        1,
+        now - queueLastTime
+      );
+
+    const instantVelocity =
+      (y - queueLastY) / dt;
+
+    queueVelocityY =
+      queueVelocityY *
+        (1 - VELOCITY_SMOOTHING) +
+      instantVelocity *
+        VELOCITY_SMOOTHING;
+
+    queueLastY = y;
+    queueLastTime = now;
+    queueDragY = rawY;
+
+    return true;
+  };
+
+  const endQueuedGesture = cancelled => {
+    if (!queueTracking) return;
+
+    const distance =
+      Math.abs(queueDragY);
+
+    const velocity =
+      Math.abs(queueVelocityY);
+
+    const direction =
+      queueDragY < 0 ? 1 : -1;
+
+    const distanceCommit =
+      distance >=
+      QUEUE_COMMIT_MIN_DISTANCE_PX;
+
+    const flickCommit =
+      distance >=
+        QUEUE_FLICK_MIN_DISTANCE_PX &&
+      velocity >=
+        FLICK_VELOCITY_PX_MS &&
+      Math.sign(queueVelocityY) ===
+        Math.sign(queueDragY);
+
+    if (
+      !cancelled &&
+      queueVerticalGesture &&
+      queueDragY !== 0 &&
+      (
+        distanceCommit ||
+        flickCommit
+      )
+    ) {
+      enqueueSwipe(direction);
+    }
+
+    resetQueueGesture();
   };
 
   /* =========================================================
@@ -296,8 +592,11 @@
     clearMotion();
 
     const token = motionToken;
-    const startedAt = performance.now();
-    const distance = to - from;
+    const startedAt =
+      performance.now();
+
+    const distance =
+      to - from;
 
     disableTransitions();
     setWillChange('transform');
@@ -312,16 +611,32 @@
         return;
       }
 
-      const elapsed = now - startedAt;
-      const progress = clamp(elapsed / duration, 0, 1);
-      const eased = easing(progress);
-      const position = from + distance * eased;
+      const elapsed =
+        now - startedAt;
+
+      const progress =
+        clamp(
+          elapsed / duration,
+          0,
+          1
+        );
+
+      const eased =
+        easing(progress);
+
+      const position =
+        from +
+        distance * eased;
 
       dragY = position;
       renderTrack(position);
 
       if (progress < 1) {
-        raf = requestAnimationFrame(frame);
+        raf =
+          requestAnimationFrame(
+            frame
+          );
+
         return;
       }
 
@@ -329,20 +644,11 @@
       dragY = to;
       renderTrack(to);
 
-      requestAnimationFrame(() => {
-        if (
-          token !== motionToken ||
-          !isOpen ||
-          !isAnimating
-        ) {
-          return;
-        }
-
-        onComplete?.();
-      });
+      onComplete?.();
     };
 
-    raf = requestAnimationFrame(frame);
+    raf =
+      requestAnimationFrame(frame);
   };
 
   /* =========================================================
@@ -350,24 +656,79 @@
      ========================================================= */
 
   const recycleForward = () => {
-    const oldPrevious = layerPrev;
+    const oldPrevious =
+      layerPrev;
 
-    layerPrev = layerCurrent;
-    layerCurrent = layerNext;
-    layerNext = oldPrevious;
+    layerPrev =
+      layerCurrent;
 
-    currentIndex = normalizeIndex(currentIndex + 1);
+    layerCurrent =
+      layerNext;
+
+    layerNext =
+      oldPrevious;
+
+    currentIndex =
+      normalizeIndex(
+        currentIndex + 1
+      );
   };
 
   const recycleBackward = () => {
-    const oldNext = layerNext;
+    const oldNext =
+      layerNext;
 
-    layerNext = layerCurrent;
-    layerCurrent = layerPrev;
-    layerPrev = oldNext;
+    layerNext =
+      layerCurrent;
 
-    currentIndex = normalizeIndex(currentIndex - 1);
+    layerCurrent =
+      layerPrev;
+
+    layerPrev =
+      oldNext;
+
+    currentIndex =
+      normalizeIndex(
+        currentIndex - 1
+      );
   };
+
+  /* =========================================================
+     QUEUED COMMIT
+     ========================================================= */
+
+  const runQueuedCommit = () => {
+    if (
+      !isOpen ||
+      isAnimating ||
+      !swipeQueue.length
+    ) {
+      return;
+    }
+
+    const direction =
+      swipeQueue.shift();
+
+    viewportHeight =
+      getViewportHeight();
+
+    dragY = 0;
+    velocityY =
+      direction > 0
+        ? -COMMIT_MAX_SPEED_PX_MS
+        : COMMIT_MAX_SPEED_PX_MS;
+
+    prepareMotionGeometry();
+
+    commit(
+      direction,
+      true
+    );
+  };
+
+  /* =========================================================
+     FINISH COMMIT
+     ========================================================= */
 
   const finishCommit = direction => {
     if (direction > 0) {
@@ -376,54 +737,77 @@
       recycleBackward();
     }
 
-    /*
-       The recycled DOM layers are repositioned first.
-       Content is then updated while all transitions are disabled.
-    */
-
     disableTransitions();
 
-    viewportHeight = getViewportHeight();
-    renderTrack(0);
+    viewportHeight =
+      getViewportHeight();
 
+    renderTrack(0);
     syncContent();
 
     dragY = 0;
     velocityY = 0;
+
     dragging = false;
     axisLocked = false;
     verticalGesture = false;
+
     isAnimating = false;
 
-    setWillChange('auto');
+    setWillChange(
+      swipeQueue.length
+        ? 'transform'
+        : 'auto'
+    );
 
     window.dispatchEvent(
-      new CustomEvent('vb:gallery-slide-change', {
-        detail: {
-          index: currentIndex,
-          artwork: art[currentIndex]
+      new CustomEvent(
+        'vb:gallery-slide-change',
+        {
+          detail: {
+            index: currentIndex,
+            artwork:
+              art[currentIndex]
+          }
         }
-      })
+      )
     );
+
+    if (swipeQueue.length) {
+      requestAnimationFrame(
+        runQueuedCommit
+      );
+    }
   };
 
   /* =========================================================
      COMMIT DURATION
      ========================================================= */
 
-  const getCommitDuration = (remainingDistance, releaseVelocity) => {
-    const velocity = Math.abs(releaseVelocity);
+  const getCommitDuration = (
+    remainingDistance,
+    releaseVelocity,
+    queued = false
+  ) => {
+    const velocity =
+      Math.abs(
+        releaseVelocity
+      );
 
     const speed = clamp(
       Math.max(
-        COMMIT_BASE_SPEED_PX_MS,
-        velocity * 1.35
+        queued
+          ? COMMIT_MAX_SPEED_PX_MS
+          : COMMIT_BASE_SPEED_PX_MS,
+        velocity * 1.45
       ),
       COMMIT_MIN_SPEED_PX_MS,
       COMMIT_MAX_SPEED_PX_MS
     );
 
-    const duration = remainingDistance / speed;
+    const duration =
+      remainingDistance /
+      speed;
 
     return clamp(
       duration,
@@ -436,7 +820,10 @@
      COMMIT
      ========================================================= */
 
-  const commit = direction => {
+  const commit = (
+    direction,
+    queued = false
+  ) => {
     if (
       !isOpen ||
       isAnimating ||
@@ -455,23 +842,41 @@
     isAnimating = true;
     dragging = false;
 
-    const height = viewportHeight || getViewportHeight();
-    const destination = direction > 0 ? -height : height;
+    const height =
+      viewportHeight ||
+      getViewportHeight();
 
-    const from = clamp(dragY, -height, height);
-    const remainingDistance = Math.abs(destination - from);
+    const destination =
+      direction > 0
+        ? -height
+        : height;
 
-    const duration = getCommitDuration(
-      remainingDistance,
-      velocityY
-    );
+    const from =
+      clamp(
+        dragY,
+        -height,
+        height
+      );
+
+    const remainingDistance =
+      Math.abs(
+        destination - from
+      );
+
+    const duration =
+      getCommitDuration(
+        remainingDistance,
+        velocityY,
+        queued
+      );
 
     animateTrack({
       from,
       to: destination,
       duration,
       easing: easeOutQuint,
-      onComplete: () => finishCommit(direction)
+      onComplete: () =>
+        finishCommit(direction)
     });
   };
 
@@ -484,17 +889,35 @@
 
     dragY = 0;
     velocityY = 0;
+
     dragging = false;
     axisLocked = false;
     verticalGesture = false;
+
     isAnimating = false;
 
     renderTrack(0);
-    setWillChange('auto');
+
+    setWillChange(
+      swipeQueue.length
+        ? 'transform'
+        : 'auto'
+    );
+
+    if (swipeQueue.length) {
+      requestAnimationFrame(
+        runQueuedCommit
+      );
+    }
   };
 
   const snapBack = () => {
-    if (!isOpen || isAnimating) return;
+    if (
+      !isOpen ||
+      isAnimating
+    ) {
+      return;
+    }
 
     if (raf) {
       cancelAnimationFrame(raf);
@@ -504,24 +927,36 @@
     isAnimating = true;
     dragging = false;
 
-    const height = viewportHeight || getViewportHeight();
-    const from = clamp(dragY, -height, height);
+    const height =
+      viewportHeight ||
+      getViewportHeight();
 
-    const distanceRatio = Math.abs(from) / Math.max(1, height);
+    const from =
+      clamp(
+        dragY,
+        -height,
+        height
+      );
 
-    const duration = clamp(
-      SNAP_MIN_DURATION_MS +
-      distanceRatio * 180,
-      SNAP_MIN_DURATION_MS,
-      SNAP_MAX_DURATION_MS
-    );
+    const distanceRatio =
+      Math.abs(from) /
+      Math.max(1, height);
+
+    const duration =
+      clamp(
+        SNAP_MIN_DURATION_MS +
+          distanceRatio * 130,
+        SNAP_MIN_DURATION_MS,
+        SNAP_MAX_DURATION_MS
+      );
 
     animateTrack({
       from,
       to: 0,
       duration,
       easing: easeOutCubic,
-      onComplete: finishSnapBack
+      onComplete:
+        finishSnapBack
     });
   };
 
@@ -530,7 +965,12 @@
      ========================================================= */
 
   const beginGesture = (x, y) => {
-    if (!isOpen || isAnimating) return false;
+    if (!isOpen) return false;
+
+    if (isAnimating) {
+      beginQueuedGesture(x, y);
+      return true;
+    }
 
     clearMotion();
     prepareMotionGeometry();
@@ -543,7 +983,8 @@
     startY = y;
 
     lastY = y;
-    lastTime = performance.now();
+    lastTime =
+      performance.now();
 
     velocityY = 0;
     dragY = 0;
@@ -552,21 +993,40 @@
   };
 
   const updateGesture = (x, y) => {
-    if (!dragging || isAnimating) return false;
+    if (!isOpen) return false;
 
-    const rawX = x - startX;
-    const rawY = y - startY;
+    if (isAnimating) {
+      return updateQueuedGesture(
+        x,
+        y
+      );
+    }
+
+    if (!dragging) {
+      return false;
+    }
+
+    const rawX =
+      x - startX;
+
+    const rawY =
+      y - startY;
 
     if (!axisLocked) {
       if (
-        Math.abs(rawX) < AXIS_LOCK_PX &&
-        Math.abs(rawY) < AXIS_LOCK_PX
+        Math.abs(rawX) <
+          AXIS_LOCK_PX &&
+        Math.abs(rawY) <
+          AXIS_LOCK_PX
       ) {
         return false;
       }
 
       axisLocked = true;
-      verticalGesture = Math.abs(rawY) > Math.abs(rawX);
+
+      verticalGesture =
+        Math.abs(rawY) >
+        Math.abs(rawX);
 
       if (!verticalGesture) {
         dragging = false;
@@ -575,22 +1035,41 @@
       }
     }
 
-    if (!verticalGesture) return false;
+    if (!verticalGesture) {
+      return false;
+    }
 
-    const now = performance.now();
-    const dt = Math.max(1, now - lastTime);
-    const instantVelocity = (y - lastY) / dt;
+    const now =
+      performance.now();
+
+    const dt =
+      Math.max(
+        1,
+        now - lastTime
+      );
+
+    const instantVelocity =
+      (y - lastY) / dt;
 
     velocityY =
-      velocityY * (1 - VELOCITY_SMOOTHING) +
-      instantVelocity * VELOCITY_SMOOTHING;
+      velocityY *
+        (1 - VELOCITY_SMOOTHING) +
+      instantVelocity *
+        VELOCITY_SMOOTHING;
 
     lastY = y;
     lastTime = now;
 
-    const height = viewportHeight || getViewportHeight();
+    const height =
+      viewportHeight ||
+      getViewportHeight();
 
-    dragY = clamp(rawY, -height, height);
+    dragY =
+      clamp(
+        rawY,
+        -height,
+        height
+      );
 
     requestDragRender();
 
@@ -598,7 +1077,15 @@
   };
 
   const endGesture = cancelled => {
-    if (!dragging || isAnimating) return;
+    if (isAnimating) {
+      endQueuedGesture(
+        cancelled
+      );
+
+      return;
+    }
+
+    if (!dragging) return;
 
     if (raf) {
       cancelAnimationFrame(raf);
@@ -609,45 +1096,70 @@
       }
     }
 
-    const distance = Math.abs(dragY);
-    const height = viewportHeight || getViewportHeight();
+    const distance =
+      Math.abs(dragY);
 
-    const distanceThreshold = Math.max(
-      COMMIT_MIN_DISTANCE_PX,
-      height * COMMIT_DISTANCE_RATIO
-    );
+    const height =
+      viewportHeight ||
+      getViewportHeight();
 
-    const distanceCommit = distance >= distanceThreshold;
+    const distanceThreshold =
+      Math.max(
+        COMMIT_MIN_DISTANCE_PX,
+        height *
+          COMMIT_DISTANCE_RATIO
+      );
+
+    const distanceCommit =
+      distance >=
+      distanceThreshold;
 
     const flickCommit =
-      distance >= FLICK_MIN_DISTANCE_PX &&
-      Math.abs(velocityY) >= FLICK_VELOCITY_PX_MS &&
-      Math.sign(velocityY) === Math.sign(dragY);
+      distance >=
+        FLICK_MIN_DISTANCE_PX &&
+      Math.abs(velocityY) >=
+        FLICK_VELOCITY_PX_MS &&
+      Math.sign(velocityY) ===
+        Math.sign(dragY);
 
-    const direction = dragY < 0 ? 1 : -1;
+    const direction =
+      dragY < 0 ? 1 : -1;
 
     if (
       !cancelled &&
       verticalGesture &&
       dragY !== 0 &&
-      (distanceCommit || flickCommit)
+      (
+        distanceCommit ||
+        flickCommit
+      )
     ) {
       commit(direction);
       return;
     }
 
-    if (verticalGesture && dragY !== 0) {
+    if (
+      verticalGesture &&
+      dragY !== 0
+    ) {
       snapBack();
       return;
     }
 
     dragY = 0;
     velocityY = 0;
+
     dragging = false;
     axisLocked = false;
     verticalGesture = false;
 
     resetLayerGeometry();
+
+    if (swipeQueue.length) {
+      requestAnimationFrame(
+        runQueuedCommit
+      );
+    }
   };
 
   /* =========================================================
@@ -657,14 +1169,16 @@
   const handleTouchStart = event => {
     if (
       !isOpen ||
-      isAnimating ||
       event.touches.length !== 1 ||
-      event.target.closest('.gallery-viewer__back')
+      event.target.closest(
+        '.gallery-viewer__back'
+      )
     ) {
       return;
     }
 
-    const touch = event.touches[0];
+    const touch =
+      event.touches[0];
 
     beginGesture(
       touch.clientX,
@@ -674,21 +1188,31 @@
 
   const handleTouchMove = event => {
     if (
-      !dragging ||
-      isAnimating ||
+      !isOpen ||
       event.touches.length !== 1
     ) {
       return;
     }
 
-    const touch = event.touches[0];
+    if (
+      !dragging &&
+      !queueTracking
+    ) {
+      return;
+    }
 
-    const consumed = updateGesture(
-      touch.clientX,
-      touch.clientY
-    );
+    const touch =
+      event.touches[0];
 
-    if (consumed) event.preventDefault();
+    const consumed =
+      updateGesture(
+        touch.clientX,
+        touch.clientY
+      );
+
+    if (consumed) {
+      event.preventDefault();
+    }
   };
 
   const handleTouchEnd = () => {
@@ -706,44 +1230,71 @@
   const handlePointerDown = event => {
     if (
       !isOpen ||
-      isAnimating ||
       event.pointerType === 'touch' ||
       event.button !== 0 ||
-      event.target.closest('.gallery-viewer__back')
+      event.target.closest(
+        '.gallery-viewer__back'
+      )
     ) {
       return;
     }
 
-    if (!beginGesture(event.clientX, event.clientY)) return;
+    if (
+      !beginGesture(
+        event.clientX,
+        event.clientY
+      )
+    ) {
+      return;
+    }
 
-    pointerId = event.pointerId;
+    pointerId =
+      event.pointerId;
 
-    viewport?.setPointerCapture?.(event.pointerId);
+    viewport?.setPointerCapture?.(
+      event.pointerId
+    );
 
     event.preventDefault();
   };
 
   const handlePointerMove = event => {
     if (
-      !dragging ||
-      isAnimating ||
+      !isOpen ||
       event.pointerType === 'touch' ||
-      pointerId !== event.pointerId
+      pointerId !==
+        event.pointerId
     ) {
       return;
     }
 
-    const consumed = updateGesture(
-      event.clientX,
-      event.clientY
-    );
+    if (
+      !dragging &&
+      !queueTracking
+    ) {
+      return;
+    }
 
-    if (consumed) event.preventDefault();
+    const consumed =
+      updateGesture(
+        event.clientX,
+        event.clientY
+      );
+
+    if (consumed) {
+      event.preventDefault();
+    }
   };
 
   const releasePointer = event => {
-    if (viewport?.hasPointerCapture?.(event.pointerId)) {
-      viewport.releasePointerCapture(event.pointerId);
+    if (
+      viewport?.hasPointerCapture?.(
+        event.pointerId
+      )
+    ) {
+      viewport.releasePointerCapture(
+        event.pointerId
+      );
     }
 
     pointerId = null;
@@ -752,7 +1303,8 @@
   const handlePointerUp = event => {
     if (
       event.pointerType === 'touch' ||
-      pointerId !== event.pointerId
+      pointerId !==
+        event.pointerId
     ) {
       return;
     }
@@ -764,7 +1316,8 @@
   const handlePointerCancel = event => {
     if (
       event.pointerType === 'touch' ||
-      pointerId !== event.pointerId
+      pointerId !==
+        event.pointerId
     ) {
       return;
     }
@@ -778,34 +1331,43 @@
      ========================================================= */
 
   const createBackButton = () => {
-    const button = createElement(
-      'button',
-      'gallery-viewer__back'
-    );
+    const button =
+      createElement(
+        'button',
+        'gallery-viewer__back'
+      );
 
-    const image = createElement(
-      'img',
-      'gallery-viewer__back-icon'
-    );
+    const image =
+      createElement(
+        'img',
+        'gallery-viewer__back-icon'
+      );
 
     button.type = 'button';
+
     button.setAttribute(
       'aria-label',
       'Back to menu'
     );
 
-    image.src = '/assets/icons/arrow-left.svg';
+    image.src =
+      '/assets/icons/arrow-left.svg';
+
     image.alt = '';
     image.decoding = 'async';
     image.draggable = false;
 
     button.appendChild(image);
 
-    button.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeGallery();
-    });
+    button.addEventListener(
+      'click',
+      event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        closeGallery();
+      }
+    );
 
     return button;
   };
@@ -817,12 +1379,14 @@
   const buildGallery = () => {
     if (gallery) return;
 
-    gallery = createElement(
-      'section',
-      'gallery-viewer'
-    );
+    gallery =
+      createElement(
+        'section',
+        'gallery-viewer'
+      );
 
-    gallery.id = 'galleryViewer';
+    gallery.id =
+      'galleryViewer';
 
     gallery.setAttribute(
       'aria-label',
@@ -834,16 +1398,23 @@
       'true'
     );
 
-    viewport = createElement(
-      'div',
-      'gallery-viewer__viewport'
-    );
+    viewport =
+      createElement(
+        'div',
+        'gallery-viewer__viewport'
+      );
 
-    layerPrev = createLayer('previous');
-    layerCurrent = createLayer('current');
-    layerNext = createLayer('next');
+    layerPrev =
+      createLayer('previous');
 
-    backButton = createBackButton();
+    layerCurrent =
+      createLayer('current');
+
+    layerNext =
+      createLayer('next');
+
+    backButton =
+      createBackButton();
 
     viewport.append(
       layerPrev,
@@ -856,7 +1427,9 @@
       backButton
     );
 
-    document.body.appendChild(gallery);
+    document.body.appendChild(
+      gallery
+    );
 
     resetLayerGeometry();
 
@@ -909,29 +1482,49 @@
      KEYBOARD
      ========================================================= */
 
-  const keyboardCommit = direction => {
-    if (!isOpen || isAnimating) return;
+  const keyboardCommit =
+    direction => {
+      if (!isOpen) return;
 
-    viewportHeight = getViewportHeight();
-    dragY = 0;
-    velocityY = 0;
+      if (isAnimating) {
+        enqueueSwipe(
+          direction
+        );
 
-    prepareMotionGeometry();
-    commit(direction);
-  };
+        return;
+      }
+
+      viewportHeight =
+        getViewportHeight();
+
+      dragY = 0;
+
+      velocityY =
+        direction > 0
+          ? -COMMIT_BASE_SPEED_PX_MS
+          : COMMIT_BASE_SPEED_PX_MS;
+
+      prepareMotionGeometry();
+
+      commit(direction);
+    };
 
   const handleKeyDown = event => {
     if (!isOpen) return;
 
-    if (event.key === 'Escape') {
+    if (
+      event.key === 'Escape'
+    ) {
       event.preventDefault();
       closeGallery();
       return;
     }
 
     if (
-      event.key === 'ArrowDown' ||
-      event.key === 'PageDown'
+      event.key ===
+        'ArrowDown' ||
+      event.key ===
+        'PageDown'
     ) {
       event.preventDefault();
       keyboardCommit(1);
@@ -939,8 +1532,10 @@
     }
 
     if (
-      event.key === 'ArrowUp' ||
-      event.key === 'PageUp'
+      event.key ===
+        'ArrowUp' ||
+      event.key ===
+        'PageUp'
     ) {
       event.preventDefault();
       keyboardCommit(-1);
@@ -951,10 +1546,13 @@
      OPEN
      ========================================================= */
 
-  const openGallery = (requestedIndex = 0) => {
-    art = Array.isArray(window.ART)
-      ? window.ART
-      : [];
+  const openGallery = (
+    requestedIndex = 0
+  ) => {
+    art =
+      Array.isArray(window.ART)
+        ? window.ART
+        : [];
 
     if (!art.length) {
       console.error(
@@ -968,13 +1566,20 @@
 
     if (!gallery) return;
 
-    const parsedIndex = Number(requestedIndex);
+    const parsedIndex =
+      Number(requestedIndex);
 
-    currentIndex = Number.isInteger(parsedIndex)
-      ? normalizeIndex(parsedIndex)
-      : 0;
+    currentIndex =
+      Number.isInteger(
+        parsedIndex
+      )
+        ? normalizeIndex(
+            parsedIndex
+          )
+        : 0;
 
     clearMotion();
+    clearSwipeQueue();
 
     isAnimating = false;
     dragging = false;
@@ -985,7 +1590,9 @@
 
     dragY = 0;
     velocityY = 0;
-    viewportHeight = getViewportHeight();
+
+    viewportHeight =
+      getViewportHeight();
 
     syncContent();
     resetLayerGeometry();
@@ -999,9 +1606,14 @@
     previousBodyTouchAction =
       document.body.style.touchAction;
 
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.touchAction = 'none';
+    document.body.style.overflow =
+      'hidden';
+
+    document.documentElement.style.overflow =
+      'hidden';
+
+    document.body.style.touchAction =
+      'none';
 
     gallery.setAttribute(
       'aria-hidden',
@@ -1020,7 +1632,12 @@
     );
 
     requestAnimationFrame(() => {
-      if (!gallery || !isOpen) return;
+      if (
+        !gallery ||
+        !isOpen
+      ) {
+        return;
+      }
 
       gallery.classList.add(
         'is-visible'
@@ -1028,12 +1645,16 @@
     });
 
     window.dispatchEvent(
-      new CustomEvent('vb:gallery-opened', {
-        detail: {
-          index: currentIndex,
-          artwork: art[currentIndex]
+      new CustomEvent(
+        'vb:gallery-opened',
+        {
+          detail: {
+            index: currentIndex,
+            artwork:
+              art[currentIndex]
+          }
         }
-      })
+      )
     );
   };
 
@@ -1042,9 +1663,15 @@
      ========================================================= */
 
   function closeGallery() {
-    if (!gallery || !isOpen) return;
+    if (
+      !gallery ||
+      !isOpen
+    ) {
+      return;
+    }
 
     clearMotion();
+    clearSwipeQueue();
 
     isOpen = false;
     isAnimating = false;
@@ -1076,7 +1703,12 @@
       previousBodyTouchAction;
 
     window.setTimeout(() => {
-      if (!gallery || isOpen) return;
+      if (
+        !gallery ||
+        isOpen
+      ) {
+        return;
+      }
 
       gallery.classList.remove(
         'is-open'
@@ -1091,7 +1723,9 @@
     }, 220);
 
     window.dispatchEvent(
-      new CustomEvent('vb:gallery-closed')
+      new CustomEvent(
+        'vb:gallery-closed'
+      )
     );
   }
 
@@ -1099,17 +1733,21 @@
      APP EVENTS
      ========================================================= */
 
-  const handleGalleryOpenRequest = event => {
-    const requestedIndex = Number(
-      event.detail?.index
-    );
+  const handleGalleryOpenRequest =
+    event => {
+      const requestedIndex =
+        Number(
+          event.detail?.index
+        );
 
-    openGallery(
-      Number.isInteger(requestedIndex)
-        ? requestedIndex
-        : 0
-    );
-  };
+      openGallery(
+        Number.isInteger(
+          requestedIndex
+        )
+          ? requestedIndex
+          : 0
+      );
+    };
 
   window.addEventListener(
     'vb:gallery-open-view',
@@ -1130,7 +1768,9 @@
       return;
     }
 
-    viewportHeight = getViewportHeight();
+    viewportHeight =
+      getViewportHeight();
+
     resetLayerGeometry();
   };
 
@@ -1146,35 +1786,40 @@
     { passive: true }
   );
 
-  window.visualViewport?.addEventListener(
-    'resize',
-    handleResize,
-    { passive: true }
-  );
+  window.visualViewport
+    ?.addEventListener(
+      'resize',
+      handleResize,
+      { passive: true }
+    );
 
   /* =========================================================
      VISIBILITY RECOVERY
      ========================================================= */
 
-  const recoverVisibleState = () => {
-    if (!isOpen) return;
+  const recoverVisibleState =
+    () => {
+      if (!isOpen) return;
 
-    clearMotion();
+      clearMotion();
+      clearSwipeQueue();
 
-    isAnimating = false;
-    dragging = false;
-    axisLocked = false;
-    verticalGesture = false;
+      isAnimating = false;
+      dragging = false;
+      axisLocked = false;
+      verticalGesture = false;
 
-    pointerId = null;
+      pointerId = null;
 
-    dragY = 0;
-    velocityY = 0;
-    viewportHeight = getViewportHeight();
+      dragY = 0;
+      velocityY = 0;
 
-    syncContent();
-    resetLayerGeometry();
-  };
+      viewportHeight =
+        getViewportHeight();
+
+      syncContent();
+      resetLayerGeometry();
+    };
 
   document.addEventListener(
     'visibilitychange',
@@ -1203,6 +1848,7 @@
     'pagehide',
     () => {
       clearMotion();
+      clearSwipeQueue();
 
       window.removeEventListener(
         'vb:gallery-open-view',
@@ -1224,10 +1870,11 @@
         handleResize
       );
 
-      window.visualViewport?.removeEventListener(
-        'resize',
-        handleResize
-      );
+      window.visualViewport
+        ?.removeEventListener(
+          'resize',
+          handleResize
+        );
 
       isOpen = false;
       isAnimating = false;
