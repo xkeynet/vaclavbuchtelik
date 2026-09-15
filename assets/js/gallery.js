@@ -2,66 +2,69 @@
 
 /* =========================================================
    VÁCLAV BUCHTELÍK — GALLERY
-   FULLSCREEN VIRTUALIZED ARTWORK SWIPE
+   CINEMATIC FULLSCREEN ARTWORK SWIPE
    PREVIOUS + CURRENT + NEXT
    ========================================================= */
 
 (() => {
-  const THRESHOLD_RATIO = 0.50;
-  const MOVE_ACTIVATE_PX = 3;
-  const MIN_COMMIT_DY = 70;
-  const MIN_COMMIT_VY = 0.42;
-  const BACKWARD_MIN_COMMIT_DY = 55;
-  const BACKWARD_MIN_COMMIT_VY = 0.34;
-  const DIRECTION_FLIP_DAMPING_PX = 12;
-  const QUEUE_MOVE_ACTIVATE_PX = 2;
-  const MAX_MOVE_STEP_PX = 260;
-  const COMMIT_DURATION_MS = 160;
-  const SNAP_DURATION_MS = 200;
-  const COMMIT_COOLDOWN_MS = 55;
-  const COMMIT_CURVE = 'cubic-bezier(0.15,0.85,0.2,1)';
-  const SNAP_CURVE = 'cubic-bezier(0.2,0,0.2,1)';
+  /* =========================================================
+     MOTION
+     ========================================================= */
+
+  const AXIS_LOCK_PX = 6;
+  const COMMIT_DISTANCE_RATIO = 0.18;
+  const COMMIT_MIN_DISTANCE_PX = 54;
+  const FLICK_MIN_DISTANCE_PX = 24;
+  const FLICK_VELOCITY_PX_MS = 0.42;
+
+  const COMMIT_DURATION_MIN_MS = 300;
+  const COMMIT_DURATION_MAX_MS = 460;
+  const SNAP_DURATION_MS = 320;
+
+  const COMMIT_CURVE = 'cubic-bezier(0.16,1,0.3,1)';
+  const SNAP_CURVE = 'cubic-bezier(0.22,1,0.36,1)';
+
+  /* =========================================================
+     STATE
+     ========================================================= */
 
   let art = [];
+
   let gallery = null;
   let viewport = null;
   let backButton = null;
+
   let layerPrev = null;
   let layerCurrent = null;
   let layerNext = null;
 
   let currentIndex = 0;
+
   let isOpen = false;
   let isAnimating = false;
   let dragging = false;
-  let touchBlocked = false;
+  let axisLocked = false;
+  let verticalGesture = false;
+
+  let pointerId = null;
 
   let startX = 0;
   let startY = 0;
-  let startT = 0;
-  let lastMoveY = 0;
-  let dy = 0;
-  let dx = 0;
-  let preparedDir = 0;
-  let gestureHeight = 0;
+  let startTime = 0;
+
+  let lastY = 0;
+  let lastTime = 0;
+  let velocityY = 0;
+
+  let dragY = 0;
+  let viewportHeight = 1;
 
   let raf = 0;
   let settleTimer = 0;
-  let lastCommitTime = 0;
-
-  let activeCommitDir = 0;
-  let activeCommitTargetIndex = null;
-
-  let queuedDir = 0;
-  let queueHasStart = false;
-  let queueStartX = 0;
-  let queueStartY = 0;
-
-  let prevLoadedIndex = null;
-  let nextLoadedIndex = null;
 
   let previousBodyOverflow = '';
   let previousHtmlOverflow = '';
+  let previousBodyTouchAction = '';
 
   const preloadedImages = new Map();
 
@@ -70,17 +73,24 @@
      ========================================================= */
 
   const createElement = (tag, className = '') => {
-    const el = document.createElement(tag);
-    if (className) el.className = className;
-    return el;
+    const element = document.createElement(tag);
+
+    if (className) {
+      element.className = className;
+    }
+
+    return element;
   };
 
   const normalizeIndex = index => {
-    if (!art.length) return 0;
+    if (!art.length) {
+      return 0;
+    }
+
     return ((index % art.length) + art.length) % art.length;
   };
 
-  const vh = () => Math.max(
+  const getViewportHeight = () => Math.max(
     1,
     window.visualViewport?.height || 0,
     window.innerHeight || 0,
@@ -88,26 +98,35 @@
   );
 
   const setTransform = (layer, y) => {
-    if (layer) layer.style.transform = `translate3d(0,${y}px,0)`;
+    if (!layer) {
+      return;
+    }
+
+    layer.style.transform = `translate3d(0,${Math.round(y * 100) / 100}px,0)`;
   };
 
-  const clearAnimation = () => {
-    if (raf) cancelAnimationFrame(raf);
-    if (settleTimer) clearTimeout(settleTimer);
-    raf = 0;
-    settleTimer = 0;
+  const setTransition = (layer, value) => {
+    if (layer) {
+      layer.style.transition = value;
+    }
   };
 
-  const resetQueue = () => {
-    queuedDir = 0;
-    queueHasStart = false;
-    queueStartX = 0;
-    queueStartY = 0;
+  const clearMotion = () => {
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+
+    if (settleTimer) {
+      clearTimeout(settleTimer);
+      settleTimer = 0;
+    }
   };
 
-  const resetActiveCommit = () => {
-    activeCommitDir = 0;
-    activeCommitTargetIndex = null;
+  const forceLayout = () => {
+    if (viewport) {
+      void viewport.offsetHeight;
+    }
   };
 
   /* =========================================================
@@ -115,18 +134,26 @@
      ========================================================= */
 
   const preloadArtwork = artwork => {
-    if (!artwork?.src || preloadedImages.has(artwork.src)) return;
+    if (!artwork?.src || preloadedImages.has(artwork.src)) {
+      return;
+    }
 
     const image = new Image();
+
     image.decoding = 'async';
     image.src = artwork.src;
 
     preloadedImages.set(artwork.src, image);
-    image.decode?.().catch(() => {});
+
+    if (typeof image.decode === 'function') {
+      image.decode().catch(() => {});
+    }
   };
 
   const preloadAround = index => {
-    if (!art.length) return;
+    if (!art.length) {
+      return;
+    }
 
     [
       normalizeIndex(index - 2),
@@ -138,16 +165,39 @@
   };
 
   /* =========================================================
-     ARTWORK LAYER
+     LAYER
      ========================================================= */
 
   const createLayer = position => {
-    const layer = createElement('article', `gallery-viewer__layer gallery-viewer__layer--${position}`);
-    const media = createElement('div', 'gallery-viewer__media');
-    const image = createElement('img', 'gallery-viewer__image');
-    const meta = createElement('div', 'gallery-viewer__meta');
-    const title = createElement('div', 'gallery-viewer__title');
-    const details = createElement('div', 'gallery-viewer__details');
+    const layer = createElement(
+      'article',
+      `gallery-viewer__layer gallery-viewer__layer--${position}`
+    );
+
+    const media = createElement(
+      'div',
+      'gallery-viewer__media'
+    );
+
+    const image = createElement(
+      'img',
+      'gallery-viewer__image'
+    );
+
+    const meta = createElement(
+      'div',
+      'gallery-viewer__meta'
+    );
+
+    const title = createElement(
+      'div',
+      'gallery-viewer__title'
+    );
+
+    const details = createElement(
+      'div',
+      'gallery-viewer__details'
+    );
 
     layer.dataset.position = position;
 
@@ -163,24 +213,41 @@
   };
 
   const setLayerArtwork = (layer, artwork, index) => {
-    if (!layer || !artwork) return;
+    if (!layer || !artwork) {
+      return;
+    }
 
-    const image = layer.querySelector('.gallery-viewer__image');
-    const title = layer.querySelector('.gallery-viewer__title');
-    const details = layer.querySelector('.gallery-viewer__details');
+    const image = layer.querySelector(
+      '.gallery-viewer__image'
+    );
+
+    const title = layer.querySelector(
+      '.gallery-viewer__title'
+    );
+
+    const details = layer.querySelector(
+      '.gallery-viewer__details'
+    );
 
     layer.dataset.index = String(index);
     layer.dataset.artId = String(artwork.id ?? '');
 
     if (image) {
-      const absoluteSrc = new URL(artwork.src, window.location.href).href;
+      const absoluteSrc = new URL(
+        artwork.src,
+        window.location.href
+      ).href;
 
-      if (image.src !== absoluteSrc) image.src = artwork.src;
+      if (image.src !== absoluteSrc) {
+        image.src = artwork.src;
+      }
 
       image.alt = artwork.title || '';
     }
 
-    if (title) title.textContent = artwork.title || '';
+    if (title) {
+      title.textContent = artwork.title || '';
+    }
 
     if (details) {
       details.textContent = artwork.details || '';
@@ -189,290 +256,423 @@
   };
 
   /* =========================================================
-     LAYER PREPARATION
+     CONTENT
      ========================================================= */
 
-  const prepareForwardLayer = (height = vh()) => {
-    const targetIndex = normalizeIndex(currentIndex + 1);
-
-    if (nextLoadedIndex !== targetIndex) {
-      setLayerArtwork(layerNext, art[targetIndex], targetIndex);
-      nextLoadedIndex = targetIndex;
+  const syncContent = () => {
+    if (!art.length) {
+      return;
     }
 
-    preloadArtwork(art[targetIndex]);
-    layerNext.style.transition = 'none';
-    setTransform(layerNext, height);
-  };
+    const previousIndex = normalizeIndex(currentIndex - 1);
+    const nextIndex = normalizeIndex(currentIndex + 1);
 
-  const prepareBackwardLayer = (height = vh()) => {
-    const targetIndex = normalizeIndex(currentIndex - 1);
+    setLayerArtwork(
+      layerPrev,
+      art[previousIndex],
+      previousIndex
+    );
 
-    if (prevLoadedIndex !== targetIndex) {
-      setLayerArtwork(layerPrev, art[targetIndex], targetIndex);
-      prevLoadedIndex = targetIndex;
-    }
+    setLayerArtwork(
+      layerCurrent,
+      art[currentIndex],
+      currentIndex
+    );
 
-    preloadArtwork(art[targetIndex]);
-    layerPrev.style.transition = 'none';
-    setTransform(layerPrev, -height);
-  };
+    setLayerArtwork(
+      layerNext,
+      art[nextIndex],
+      nextIndex
+    );
 
-  const warmForwardNext = () => {
-    if (!isAnimating) prepareForwardLayer();
-  };
-
-  const warmBackwardNext = () => {
-    if (!isAnimating) prepareBackwardLayer();
-  };
-
-  const prepareNextForDirection = dir => {
-    const height = gestureHeight || vh();
-
-    if (dir > 0) prepareForwardLayer(height);
-    else prepareBackwardLayer(height);
-
-    preparedDir = dir;
+    preloadAround(currentIndex);
   };
 
   /* =========================================================
-     TRANSFORM RESET
+     GEOMETRY
      ========================================================= */
 
-  const resetTransformsNoAnim = () => {
-    if (!layerPrev || !layerCurrent || !layerNext) return;
+  const resetLayerGeometry = () => {
+    if (!layerPrev || !layerCurrent || !layerNext) {
+      return;
+    }
 
-    if (raf) cancelAnimationFrame(raf);
-    raf = 0;
-
-    const height = vh();
+    viewportHeight = getViewportHeight();
 
     [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      layer.style.transition = 'none';
+      setTransition(layer, 'none');
       layer.style.willChange = 'auto';
     });
 
-    setTransform(layerPrev, -height);
+    setTransform(layerPrev, -viewportHeight);
     setTransform(layerCurrent, 0);
-    setTransform(layerNext, height);
+    setTransform(layerNext, viewportHeight);
   };
 
-  /* =========================================================
-     INITIAL CONTENT
-     ========================================================= */
+  const prepareDragGeometry = () => {
+    viewportHeight = getViewportHeight();
 
-  const syncInitialContent = () => {
-    if (!art.length) return;
-
-    const prevIndex = normalizeIndex(currentIndex - 1);
-    const nextIndex = normalizeIndex(currentIndex + 1);
-
-    setLayerArtwork(layerPrev, art[prevIndex], prevIndex);
-    setLayerArtwork(layerCurrent, art[currentIndex], currentIndex);
-    setLayerArtwork(layerNext, art[nextIndex], nextIndex);
-
-    prevLoadedIndex = prevIndex;
-    nextLoadedIndex = nextIndex;
-
-    preloadAround(currentIndex);
-  };
-
-  /* =========================================================
-     FINISH COMMIT / RECYCLE
-     ========================================================= */
-
-  const finishCommit = (dir, targetIndex) => {
-    currentIndex = targetIndex;
-
-    if (dir > 0) {
-      const oldPrev = layerPrev;
-      const oldCurrent = layerCurrent;
-
-      layerCurrent = layerNext;
-      layerPrev = oldCurrent;
-      layerNext = oldPrev;
-
-      prevLoadedIndex = normalizeIndex(currentIndex - 1);
-      nextLoadedIndex = null;
-    } else {
-      const oldNext = layerNext;
-      const oldCurrent = layerCurrent;
-
-      layerCurrent = layerPrev;
-      layerNext = oldCurrent;
-      layerPrev = oldNext;
-
-      nextLoadedIndex = normalizeIndex(currentIndex + 1);
-      prevLoadedIndex = null;
-    }
-
-    resetTransformsNoAnim();
-
-    preparedDir = 0;
-    dy = 0;
-    dx = 0;
-    isAnimating = false;
-    resetActiveCommit();
-
-    preloadAround(currentIndex);
-
-    window.dispatchEvent(new CustomEvent('vb:gallery-slide-change', {
-      detail: { index: currentIndex, artwork: art[currentIndex] }
-    }));
-
-    const queued = queuedDir;
-    resetQueue();
-
-    requestAnimationFrame(() => {
-      warmForwardNext();
-      warmBackwardNext();
-
-      if (queued && !isAnimating && isOpen) {
-        preparedDir = queued;
-        commit(queued);
-      }
+    [layerPrev, layerCurrent, layerNext].forEach(layer => {
+      setTransition(layer, 'none');
+      layer.style.willChange = 'transform';
     });
   };
 
+  const renderDrag = () => {
+    raf = 0;
+
+    if (!dragging || !verticalGesture) {
+      return;
+    }
+
+    const height = viewportHeight || getViewportHeight();
+    const offset = Math.max(-height, Math.min(height, dragY));
+
+    setTransform(layerCurrent, offset);
+    setTransform(layerPrev, -height + offset);
+    setTransform(layerNext, height + offset);
+  };
+
+  const requestDragRender = () => {
+    if (!raf) {
+      raf = requestAnimationFrame(renderDrag);
+    }
+  };
+
   /* =========================================================
-     INTERRUPT ACTIVE COMMIT
+     RECYCLE
      ========================================================= */
 
-  const interruptActiveCommit = () => {
-    if (!isAnimating || !activeCommitDir || activeCommitTargetIndex === null) return false;
+  const recycleForward = () => {
+    const oldPrevious = layerPrev;
 
-    clearAnimation();
-    finishCommit(activeCommitDir, activeCommitTargetIndex);
+    layerPrev = layerCurrent;
+    layerCurrent = layerNext;
+    layerNext = oldPrevious;
 
-    return true;
+    currentIndex = normalizeIndex(currentIndex + 1);
+  };
+
+  const recycleBackward = () => {
+    const oldNext = layerNext;
+
+    layerNext = layerCurrent;
+    layerCurrent = layerPrev;
+    layerPrev = oldNext;
+
+    currentIndex = normalizeIndex(currentIndex - 1);
+  };
+
+  const finishCommit = direction => {
+    if (direction > 0) {
+      recycleForward();
+    } else {
+      recycleBackward();
+    }
+
+    syncContent();
+    resetLayerGeometry();
+
+    dragY = 0;
+    velocityY = 0;
+    dragging = false;
+    axisLocked = false;
+    verticalGesture = false;
+    isAnimating = false;
+
+    window.dispatchEvent(
+      new CustomEvent('vb:gallery-slide-change', {
+        detail: {
+          index: currentIndex,
+          artwork: art[currentIndex]
+        }
+      })
+    );
   };
 
   /* =========================================================
      COMMIT
      ========================================================= */
 
-  const commit = dir => {
-    if (!isOpen || !art.length) return;
+  const getCommitDuration = remainingDistance => {
+    const ratio = Math.min(
+      1,
+      Math.max(
+        0,
+        remainingDistance / Math.max(1, viewportHeight)
+      )
+    );
 
-    const now = performance.now();
+    return Math.round(
+      COMMIT_DURATION_MIN_MS +
+      (
+        COMMIT_DURATION_MAX_MS -
+        COMMIT_DURATION_MIN_MS
+      ) * ratio
+    );
+  };
 
-    if (now - lastCommitTime < COMMIT_COOLDOWN_MS) return;
-    if (isAnimating) return;
+  const commit = direction => {
+    if (
+      !isOpen ||
+      isAnimating ||
+      !layerCurrent ||
+      !layerPrev ||
+      !layerNext
+    ) {
+      return;
+    }
 
-    const targetIndex = normalizeIndex(currentIndex + dir);
-    const targetLayer = dir > 0 ? layerNext : layerPrev;
+    clearMotion();
 
-    if (!targetLayer) return;
-
-    if (dir > 0) prepareForwardLayer(gestureHeight || vh());
-    else prepareBackwardLayer(gestureHeight || vh());
-
-    clearAnimation();
-
-    lastCommitTime = now;
     isAnimating = true;
+    dragging = false;
 
-    const height = gestureHeight || vh();
+    const height = viewportHeight || getViewportHeight();
+    const destination = direction > 0 ? -height : height;
 
-    activeCommitDir = dir;
-    activeCommitTargetIndex = targetIndex;
+    const remainingDistance = Math.abs(
+      destination - dragY
+    );
 
-    layerCurrent.style.willChange = 'transform';
-    targetLayer.style.willChange = 'transform';
+    const duration = getCommitDuration(
+      remainingDistance
+    );
 
-    layerCurrent.style.transition = `transform ${COMMIT_DURATION_MS}ms ${COMMIT_CURVE}`;
-    targetLayer.style.transition = `transform ${COMMIT_DURATION_MS}ms ${COMMIT_CURVE}`;
+    const transition =
+      `transform ${duration}ms ${COMMIT_CURVE}`;
 
-    setTransform(layerCurrent, dir > 0 ? -height : height);
-    setTransform(targetLayer, 0);
+    [layerPrev, layerCurrent, layerNext].forEach(layer => {
+      layer.style.willChange = 'transform';
+      setTransition(layer, transition);
+    });
+
+    forceLayout();
+
+    requestAnimationFrame(() => {
+      if (!isAnimating || !isOpen) {
+        return;
+      }
+
+      setTransform(
+        layerCurrent,
+        destination
+      );
+
+      setTransform(
+        layerPrev,
+        -height + destination
+      );
+
+      setTransform(
+        layerNext,
+        height + destination
+      );
+    });
 
     settleTimer = window.setTimeout(() => {
       settleTimer = 0;
-      finishCommit(dir, targetIndex);
-    }, COMMIT_DURATION_MS);
+
+      if (!isAnimating || !isOpen) {
+        return;
+      }
+
+      finishCommit(direction);
+    }, duration + 20);
   };
 
   /* =========================================================
      SNAP BACK
      ========================================================= */
 
-  const snapBack = () => {
-    if (isAnimating || !isOpen) return;
+  const finishSnapBack = () => {
+    resetLayerGeometry();
 
-    clearAnimation();
-    resetQueue();
-
-    isAnimating = true;
-
-    const height = gestureHeight || vh();
-    const snapDir = preparedDir;
-    const targetLayer = preparedDir > 0 ? layerNext : layerPrev;
-
-    layerCurrent.style.transition = `transform ${SNAP_DURATION_MS}ms ${SNAP_CURVE}`;
-
-    if (targetLayer) {
-      targetLayer.style.transition = `transform ${SNAP_DURATION_MS}ms ${SNAP_CURVE}`;
-    }
-
-    setTransform(layerCurrent, 0);
-
-    if (targetLayer) {
-      setTransform(targetLayer, preparedDir > 0 ? height : -height);
-    }
-
-    settleTimer = window.setTimeout(() => {
-      settleTimer = 0;
-      preparedDir = 0;
-      dy = 0;
-      dx = 0;
-
-      resetTransformsNoAnim();
-      isAnimating = false;
-
-      if (snapDir < 0) warmBackwardNext();
-      else warmForwardNext();
-    }, SNAP_DURATION_MS);
+    dragY = 0;
+    velocityY = 0;
+    dragging = false;
+    axisLocked = false;
+    verticalGesture = false;
+    isAnimating = false;
   };
 
-  /* =========================================================
-     GESTURE END
-     ========================================================= */
-
-  const finishGesture = cancelled => {
-    if (!dragging || isAnimating) return;
-
-    const totalDy = dy;
-    const dt = Math.max(1, performance.now() - startT);
-    const height = gestureHeight || vh();
-
-    dragging = false;
-    touchBlocked = false;
-
-    if (cancelled || preparedDir === 0) {
-      if (preparedDir) snapBack();
-      else resetTransformsNoAnim();
-
-      dy = 0;
-      dx = 0;
+  const snapBack = () => {
+    if (!isOpen || isAnimating) {
       return;
     }
 
-    const velocityY = (lastMoveY - startY) / dt;
-    const isBackward = preparedDir < 0;
-    const minDy = isBackward ? BACKWARD_MIN_COMMIT_DY : MIN_COMMIT_DY;
-    const minVy = isBackward ? BACKWARD_MIN_COMMIT_VY : MIN_COMMIT_VY;
+    clearMotion();
 
-    if (
-      Math.abs(totalDy) >= height * THRESHOLD_RATIO ||
-      (Math.abs(totalDy) >= minDy && Math.abs(velocityY) >= minVy)
-    ) {
-      commit(preparedDir);
-    } else {
-      snapBack();
+    isAnimating = true;
+    dragging = false;
+
+    const height = viewportHeight || getViewportHeight();
+    const transition =
+      `transform ${SNAP_DURATION_MS}ms ${SNAP_CURVE}`;
+
+    [layerPrev, layerCurrent, layerNext].forEach(layer => {
+      layer.style.willChange = 'transform';
+      setTransition(layer, transition);
+    });
+
+    forceLayout();
+
+    requestAnimationFrame(() => {
+      if (!isAnimating || !isOpen) {
+        return;
+      }
+
+      setTransform(layerPrev, -height);
+      setTransform(layerCurrent, 0);
+      setTransform(layerNext, height);
+    });
+
+    settleTimer = window.setTimeout(() => {
+      settleTimer = 0;
+
+      if (!isOpen) {
+        return;
+      }
+
+      finishSnapBack();
+    }, SNAP_DURATION_MS + 20);
+  };
+
+  /* =========================================================
+     GESTURE
+     ========================================================= */
+
+  const beginGesture = (x, y) => {
+    if (!isOpen || isAnimating) {
+      return false;
     }
 
-    dy = 0;
-    dx = 0;
+    clearMotion();
+    prepareDragGeometry();
+
+    dragging = true;
+    axisLocked = false;
+    verticalGesture = false;
+
+    startX = x;
+    startY = y;
+    startTime = performance.now();
+
+    lastY = y;
+    lastTime = startTime;
+
+    velocityY = 0;
+    dragY = 0;
+
+    return true;
+  };
+
+  const updateGesture = (x, y) => {
+    if (!dragging || isAnimating) {
+      return false;
+    }
+
+    const rawX = x - startX;
+    const rawY = y - startY;
+
+    if (!axisLocked) {
+      if (
+        Math.abs(rawX) < AXIS_LOCK_PX &&
+        Math.abs(rawY) < AXIS_LOCK_PX
+      ) {
+        return false;
+      }
+
+      axisLocked = true;
+      verticalGesture =
+        Math.abs(rawY) > Math.abs(rawX);
+
+      if (!verticalGesture) {
+        dragging = false;
+        resetLayerGeometry();
+        return false;
+      }
+    }
+
+    if (!verticalGesture) {
+      return false;
+    }
+
+    const now = performance.now();
+    const dt = Math.max(1, now - lastTime);
+    const instantVelocity = (y - lastY) / dt;
+
+    velocityY =
+      velocityY * 0.72 +
+      instantVelocity * 0.28;
+
+    lastY = y;
+    lastTime = now;
+
+    const height = viewportHeight || getViewportHeight();
+
+    dragY = Math.max(
+      -height,
+      Math.min(height, rawY)
+    );
+
+    requestDragRender();
+
+    return true;
+  };
+
+  const endGesture = cancelled => {
+    if (!dragging || isAnimating) {
+      return;
+    }
+
+    if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      renderDrag();
+    }
+
+    const distance = Math.abs(dragY);
+    const height = viewportHeight || getViewportHeight();
+
+    const distanceThreshold = Math.max(
+      COMMIT_MIN_DISTANCE_PX,
+      height * COMMIT_DISTANCE_RATIO
+    );
+
+    const distanceCommit =
+      distance >= distanceThreshold;
+
+    const flickCommit =
+      distance >= FLICK_MIN_DISTANCE_PX &&
+      Math.abs(velocityY) >= FLICK_VELOCITY_PX_MS &&
+      Math.sign(velocityY) === Math.sign(dragY);
+
+    const direction =
+      dragY < 0 ? 1 : -1;
+
+    if (
+      !cancelled &&
+      verticalGesture &&
+      dragY !== 0 &&
+      (distanceCommit || flickCommit)
+    ) {
+      commit(direction);
+      return;
+    }
+
+    if (verticalGesture && dragY !== 0) {
+      snapBack();
+      return;
+    }
+
+    dragY = 0;
+    velocityY = 0;
+    dragging = false;
+    axisLocked = false;
+    verticalGesture = false;
+
+    resetLayerGeometry();
   };
 
   /* =========================================================
@@ -480,142 +680,50 @@
      ========================================================= */
 
   const handleTouchStart = event => {
-    touchBlocked =
+    if (
       !isOpen ||
+      isAnimating ||
       event.touches.length !== 1 ||
-      !!event.target.closest('.gallery-viewer__back');
-
-    if (touchBlocked) return;
-
-    gestureHeight = vh();
-
-    if (isAnimating) {
-      const interrupted = interruptActiveCommit();
-
-      if (!interrupted || isAnimating) {
-        queueHasStart = true;
-        queueStartY = event.touches[0].clientY;
-        queueStartX = event.touches[0].clientX;
-        queuedDir = 0;
-        return;
-      }
-    }
-
-    dragging = true;
-    preparedDir = 0;
-    dy = 0;
-    dx = 0;
-
-    startY = event.touches[0].clientY;
-    startX = event.touches[0].clientX;
-    startT = performance.now();
-    lastMoveY = startY;
-
-    [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      layer.style.transition = 'none';
-      layer.style.willChange = 'transform';
-    });
-
-    if (startY < gestureHeight * 0.45) warmBackwardNext();
-    else warmForwardNext();
-  };
-
-  const handleTouchMove = event => {
-    if (touchBlocked || !isOpen || !event.touches || event.touches.length !== 1) return;
-
-    const y = event.touches[0].clientY;
-    const x = event.touches[0].clientX;
-
-    if (isAnimating) {
-      if (!queueHasStart) {
-        queueHasStart = true;
-        queueStartY = y;
-        queueStartX = x;
-        queuedDir = 0;
-        return;
-      }
-
-      const qdy = y - queueStartY;
-      const qdx = x - queueStartX;
-
-      if (Math.abs(qdx) > Math.abs(qdy) * 1.4 || Math.abs(qdy) < QUEUE_MOVE_ACTIVATE_PX) return;
-
-      const nextQueuedDir = qdy < 0 ? 1 : -1;
-
-      if (queuedDir && queuedDir !== nextQueuedDir) {
-        queueStartY = y;
-        queueStartX = x;
-      }
-
-      queuedDir = nextQueuedDir;
+      event.target.closest('.gallery-viewer__back')
+    ) {
       return;
     }
 
-    if (!dragging) {
-      dragging = true;
-      preparedDir = 0;
-      dy = 0;
-      dx = 0;
-      gestureHeight = gestureHeight || vh();
+    const touch = event.touches[0];
 
-      startY = y;
-      startX = x;
-      startT = performance.now();
-      lastMoveY = y;
+    beginGesture(
+      touch.clientX,
+      touch.clientY
+    );
+  };
 
-      [layerPrev, layerCurrent, layerNext].forEach(layer => {
-        layer.style.transition = 'none';
-        layer.style.willChange = 'transform';
-      });
+  const handleTouchMove = event => {
+    if (
+      !dragging ||
+      isAnimating ||
+      event.touches.length !== 1
+    ) {
+      return;
     }
 
-    const rawDy = y - startY;
-    const rawDx = x - startX;
+    const touch = event.touches[0];
 
-    if (Math.abs(rawDx) > Math.abs(rawDy) * 1.4 || Math.abs(rawDy) < MOVE_ACTIVATE_PX) return;
+    const consumed = updateGesture(
+      touch.clientX,
+      touch.clientY
+    );
 
-    event.preventDefault();
-
-    const previousDy = dy;
-    const delta = rawDy - previousDy;
-
-    dy = Math.abs(delta) > MAX_MOVE_STEP_PX
-      ? previousDy + Math.sign(delta) * MAX_MOVE_STEP_PX
-      : rawDy;
-
-    dx = rawDx;
-    lastMoveY = y;
-
-    const rawDir = dy < 0 ? 1 : -1;
-    const directionFlip = preparedDir !== 0 && preparedDir !== rawDir;
-    const dir = directionFlip && Math.abs(dy) < DIRECTION_FLIP_DAMPING_PX ? preparedDir : rawDir;
-
-    if (preparedDir !== dir) prepareNextForDirection(dir);
-
-    if (!raf) {
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-
-        const height = gestureHeight || vh();
-        const targetLayer = preparedDir > 0 ? layerNext : layerPrev;
-
-        setTransform(layerCurrent, dy);
-
-        if (targetLayer) {
-          setTransform(targetLayer, preparedDir > 0 ? height + dy : -height + dy);
-        }
-      });
+    if (consumed) {
+      event.preventDefault();
     }
   };
 
   const handleTouchEnd = () => {
-    touchBlocked = false;
-    finishGesture(false);
+    endGesture(false);
   };
 
   const handleTouchCancel = () => {
-    touchBlocked = false;
-    finishGesture(true);
+    endGesture(true);
   };
 
   /* =========================================================
@@ -623,76 +731,90 @@
      ========================================================= */
 
   const handlePointerDown = event => {
-    if (!isOpen || isAnimating || event.pointerType === 'touch' || event.button !== 0) return;
-    if (event.target.closest('.gallery-viewer__back')) return;
+    if (
+      !isOpen ||
+      isAnimating ||
+      event.pointerType === 'touch' ||
+      event.button !== 0 ||
+      event.target.closest('.gallery-viewer__back')
+    ) {
+      return;
+    }
 
-    dragging = true;
-    preparedDir = 0;
-    gestureHeight = vh();
-    dy = 0;
-    dx = 0;
+    if (
+      !beginGesture(
+        event.clientX,
+        event.clientY
+      )
+    ) {
+      return;
+    }
 
-    startX = event.clientX;
-    startY = event.clientY;
-    startT = performance.now();
-    lastMoveY = startY;
+    pointerId = event.pointerId;
 
-    [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      layer.style.transition = 'none';
-      layer.style.willChange = 'transform';
-    });
+    viewport?.setPointerCapture?.(
+      event.pointerId
+    );
 
-    viewport?.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
   };
 
   const handlePointerMove = event => {
-    if (!dragging || isAnimating || event.pointerType === 'touch') return;
+    if (
+      !dragging ||
+      isAnimating ||
+      event.pointerType === 'touch' ||
+      pointerId !== event.pointerId
+    ) {
+      return;
+    }
 
-    const rawDy = event.clientY - startY;
-    const rawDx = event.clientX - startX;
+    const consumed = updateGesture(
+      event.clientX,
+      event.clientY
+    );
 
-    if (Math.abs(rawDx) > Math.abs(rawDy) * 1.4 || Math.abs(rawDy) < MOVE_ACTIVATE_PX) return;
-
-    const previousDy = dy;
-    const delta = rawDy - previousDy;
-
-    dy = Math.abs(delta) > MAX_MOVE_STEP_PX
-      ? previousDy + Math.sign(delta) * MAX_MOVE_STEP_PX
-      : rawDy;
-
-    dx = rawDx;
-    lastMoveY = event.clientY;
-
-    const rawDir = dy < 0 ? 1 : -1;
-    const directionFlip = preparedDir && preparedDir !== rawDir;
-    const dir = directionFlip && Math.abs(dy) < DIRECTION_FLIP_DAMPING_PX ? preparedDir : rawDir;
-
-    if (preparedDir !== dir) prepareNextForDirection(dir);
-
-    if (!raf) {
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-
-        const height = gestureHeight || vh();
-        const targetLayer = preparedDir > 0 ? layerNext : layerPrev;
-
-        setTransform(layerCurrent, dy);
-
-        if (targetLayer) {
-          setTransform(targetLayer, preparedDir > 0 ? height + dy : -height + dy);
-        }
-      });
+    if (consumed) {
+      event.preventDefault();
     }
   };
 
-  const handlePointerUp = event => {
-    if (event.pointerType === 'touch') return;
-
-    if (viewport?.hasPointerCapture?.(event.pointerId)) {
-      viewport.releasePointerCapture(event.pointerId);
+  const releasePointer = event => {
+    if (
+      viewport?.hasPointerCapture?.(
+        event.pointerId
+      )
+    ) {
+      viewport.releasePointerCapture(
+        event.pointerId
+      );
     }
 
-    finishGesture(false);
+    pointerId = null;
+  };
+
+  const handlePointerUp = event => {
+    if (
+      event.pointerType === 'touch' ||
+      pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    releasePointer(event);
+    endGesture(false);
+  };
+
+  const handlePointerCancel = event => {
+    if (
+      event.pointerType === 'touch' ||
+      pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    releasePointer(event);
+    endGesture(true);
   };
 
   /* =========================================================
@@ -700,24 +822,40 @@
      ========================================================= */
 
   const createBackButton = () => {
-    const button = createElement('button', 'gallery-viewer__back');
-    const image = createElement('img', 'gallery-viewer__back-icon');
+    const button = createElement(
+      'button',
+      'gallery-viewer__back'
+    );
+
+    const image = createElement(
+      'img',
+      'gallery-viewer__back-icon'
+    );
 
     button.type = 'button';
-    button.setAttribute('aria-label', 'Back to menu');
+    button.setAttribute(
+      'aria-label',
+      'Back to menu'
+    );
 
-    image.src = '/assets/icons/arrow-left.svg';
+    image.src =
+      '/assets/icons/arrow-left.svg';
+
     image.alt = '';
     image.decoding = 'async';
     image.draggable = false;
 
     button.appendChild(image);
 
-    button.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeGallery();
-    });
+    button.addEventListener(
+      'click',
+      event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        closeGallery();
+      }
+    );
 
     return button;
   };
@@ -727,43 +865,118 @@
      ========================================================= */
 
   const buildGallery = () => {
-    if (gallery) return;
+    if (gallery) {
+      return;
+    }
 
-    gallery = createElement('section', 'gallery-viewer');
+    gallery = createElement(
+      'section',
+      'gallery-viewer'
+    );
+
     gallery.id = 'galleryViewer';
-    gallery.setAttribute('aria-label', 'Artwork gallery');
-    gallery.setAttribute('aria-hidden', 'true');
 
-    viewport = createElement('div', 'gallery-viewer__viewport');
+    gallery.setAttribute(
+      'aria-label',
+      'Artwork gallery'
+    );
+
+    gallery.setAttribute(
+      'aria-hidden',
+      'true'
+    );
+
+    viewport = createElement(
+      'div',
+      'gallery-viewer__viewport'
+    );
 
     layerPrev = createLayer('previous');
     layerCurrent = createLayer('current');
     layerNext = createLayer('next');
+
     backButton = createBackButton();
 
-    viewport.append(layerPrev, layerCurrent, layerNext);
-    gallery.append(viewport, backButton);
+    viewport.append(
+      layerPrev,
+      layerCurrent,
+      layerNext
+    );
+
+    gallery.append(
+      viewport,
+      backButton
+    );
+
     document.body.appendChild(gallery);
 
-    resetTransformsNoAnim();
+    resetLayerGeometry();
 
-    viewport.addEventListener('touchstart', handleTouchStart, { passive: true });
-    viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
-    viewport.addEventListener('touchend', handleTouchEnd, { passive: true });
-    viewport.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+    viewport.addEventListener(
+      'touchstart',
+      handleTouchStart,
+      { passive: true }
+    );
 
-    viewport.addEventListener('pointerdown', handlePointerDown);
-    viewport.addEventListener('pointermove', handlePointerMove);
-    viewport.addEventListener('pointerup', handlePointerUp);
-    viewport.addEventListener('pointercancel', () => finishGesture(true));
+    viewport.addEventListener(
+      'touchmove',
+      handleTouchMove,
+      { passive: false }
+    );
+
+    viewport.addEventListener(
+      'touchend',
+      handleTouchEnd,
+      { passive: true }
+    );
+
+    viewport.addEventListener(
+      'touchcancel',
+      handleTouchCancel,
+      { passive: true }
+    );
+
+    viewport.addEventListener(
+      'pointerdown',
+      handlePointerDown
+    );
+
+    viewport.addEventListener(
+      'pointermove',
+      handlePointerMove
+    );
+
+    viewport.addEventListener(
+      'pointerup',
+      handlePointerUp
+    );
+
+    viewport.addEventListener(
+      'pointercancel',
+      handlePointerCancel
+    );
   };
 
   /* =========================================================
      KEYBOARD
      ========================================================= */
 
+  const keyboardCommit = direction => {
+    if (!isOpen || isAnimating) {
+      return;
+    }
+
+    viewportHeight = getViewportHeight();
+    dragY = 0;
+
+    prepareDragGeometry();
+    commit(direction);
+  };
+
   const handleKeyDown = event => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
 
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -771,18 +984,21 @@
       return;
     }
 
-    if (isAnimating) return;
+    if (
+      event.key === 'ArrowDown' ||
+      event.key === 'PageDown'
+    ) {
+      event.preventDefault();
+      keyboardCommit(1);
+      return;
+    }
 
-    if (event.key === 'ArrowDown' || event.key === 'PageDown') {
+    if (
+      event.key === 'ArrowUp' ||
+      event.key === 'PageUp'
+    ) {
       event.preventDefault();
-      gestureHeight = vh();
-      prepareNextForDirection(1);
-      commit(1);
-    } else if (event.key === 'ArrowUp' || event.key === 'PageUp') {
-      event.preventDefault();
-      gestureHeight = vh();
-      prepareNextForDirection(-1);
-      commit(-1);
+      keyboardCommit(-1);
     }
   };
 
@@ -791,62 +1007,102 @@
      ========================================================= */
 
   const openGallery = (requestedIndex = 0) => {
-    art = Array.isArray(window.ART) ? window.ART : [];
+    art = Array.isArray(window.ART)
+      ? window.ART
+      : [];
 
     if (!art.length) {
-      console.error('[VB Gallery] window.ART is empty or art.js is not loaded.');
+      console.error(
+        '[VB Gallery] window.ART is empty or art.js is not loaded.'
+      );
+
       return;
     }
 
     buildGallery();
-    if (!gallery) return;
 
-    const parsedIndex = Number(requestedIndex);
-    currentIndex = Number.isInteger(parsedIndex) ? normalizeIndex(parsedIndex) : 0;
+    if (!gallery) {
+      return;
+    }
 
-    clearAnimation();
-    resetQueue();
-    resetActiveCommit();
+    const parsedIndex = Number(
+      requestedIndex
+    );
 
-    dragging = false;
-    touchBlocked = false;
+    currentIndex = Number.isInteger(
+      parsedIndex
+    )
+      ? normalizeIndex(parsedIndex)
+      : 0;
+
+    clearMotion();
+
     isAnimating = false;
-    preparedDir = 0;
-    gestureHeight = vh();
-    dy = 0;
-    dx = 0;
+    dragging = false;
+    axisLocked = false;
+    verticalGesture = false;
 
-    prevLoadedIndex = null;
-    nextLoadedIndex = null;
+    pointerId = null;
 
-    syncInitialContent();
-    resetTransformsNoAnim();
+    dragY = 0;
+    velocityY = 0;
+    viewportHeight = getViewportHeight();
 
-    previousBodyOverflow = document.body.style.overflow;
-    previousHtmlOverflow = document.documentElement.style.overflow;
+    syncContent();
+    resetLayerGeometry();
 
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
+    previousBodyOverflow =
+      document.body.style.overflow;
 
-    gallery.setAttribute('aria-hidden', 'false');
-    gallery.classList.add('is-open');
+    previousHtmlOverflow =
+      document.documentElement.style.overflow;
+
+    previousBodyTouchAction =
+      document.body.style.touchAction;
+
+    document.body.style.overflow =
+      'hidden';
+
+    document.documentElement.style.overflow =
+      'hidden';
+
+    document.body.style.touchAction =
+      'none';
+
+    gallery.setAttribute(
+      'aria-hidden',
+      'false'
+    );
+
+    gallery.classList.add(
+      'is-open'
+    );
 
     isOpen = true;
-    window.addEventListener('keydown', handleKeyDown);
+
+    window.addEventListener(
+      'keydown',
+      handleKeyDown
+    );
 
     requestAnimationFrame(() => {
-      if (!gallery || !isOpen) return;
-      gallery.classList.add('is-visible');
+      if (!gallery || !isOpen) {
+        return;
+      }
+
+      gallery.classList.add(
+        'is-visible'
+      );
     });
 
-    requestAnimationFrame(() => {
-      warmForwardNext();
-      warmBackwardNext();
-    });
-
-    window.dispatchEvent(new CustomEvent('vb:gallery-opened', {
-      detail: { index: currentIndex, artwork: art[currentIndex] }
-    }));
+    window.dispatchEvent(
+      new CustomEvent('vb:gallery-opened', {
+        detail: {
+          index: currentIndex,
+          artwork: art[currentIndex]
+        }
+      })
+    );
   };
 
   /* =========================================================
@@ -854,35 +1110,61 @@
      ========================================================= */
 
   function closeGallery() {
-    if (!gallery || !isOpen) return;
+    if (!gallery || !isOpen) {
+      return;
+    }
 
-    clearAnimation();
-    resetQueue();
-    resetActiveCommit();
+    clearMotion();
 
-    dragging = false;
-    touchBlocked = false;
-    isAnimating = false;
-    preparedDir = 0;
-    dy = 0;
-    dx = 0;
     isOpen = false;
+    isAnimating = false;
+    dragging = false;
+    axisLocked = false;
+    verticalGesture = false;
 
-    gallery.classList.remove('is-visible');
-    window.removeEventListener('keydown', handleKeyDown);
+    pointerId = null;
 
-    document.body.style.overflow = previousBodyOverflow;
-    document.documentElement.style.overflow = previousHtmlOverflow;
+    dragY = 0;
+    velocityY = 0;
+
+    gallery.classList.remove(
+      'is-visible'
+    );
+
+    window.removeEventListener(
+      'keydown',
+      handleKeyDown
+    );
+
+    document.body.style.overflow =
+      previousBodyOverflow;
+
+    document.documentElement.style.overflow =
+      previousHtmlOverflow;
+
+    document.body.style.touchAction =
+      previousBodyTouchAction;
 
     window.setTimeout(() => {
-      if (!gallery || isOpen) return;
+      if (!gallery || isOpen) {
+        return;
+      }
 
-      gallery.classList.remove('is-open');
-      gallery.setAttribute('aria-hidden', 'true');
-      resetTransformsNoAnim();
+      gallery.classList.remove(
+        'is-open'
+      );
+
+      gallery.setAttribute(
+        'aria-hidden',
+        'true'
+      );
+
+      resetLayerGeometry();
     }, 220);
 
-    window.dispatchEvent(new CustomEvent('vb:gallery-closed'));
+    window.dispatchEvent(
+      new CustomEvent('vb:gallery-closed')
+    );
   }
 
   /* =========================================================
@@ -890,77 +1172,143 @@
      ========================================================= */
 
   const handleGalleryOpenRequest = event => {
-    const requestedIndex = Number(event.detail?.index);
-    openGallery(Number.isInteger(requestedIndex) ? requestedIndex : 0);
+    const requestedIndex = Number(
+      event.detail?.index
+    );
+
+    openGallery(
+      Number.isInteger(requestedIndex)
+        ? requestedIndex
+        : 0
+    );
   };
 
-  window.addEventListener('vb:gallery-open-view', handleGalleryOpenRequest);
+  window.addEventListener(
+    'vb:gallery-open-view',
+    handleGalleryOpenRequest
+  );
 
   /* =========================================================
      RESIZE
      ========================================================= */
 
   const handleResize = () => {
-    if (!gallery || !isOpen || dragging || isAnimating) return;
+    if (
+      !gallery ||
+      !isOpen ||
+      dragging ||
+      isAnimating
+    ) {
+      return;
+    }
 
-    gestureHeight = vh();
-    resetTransformsNoAnim();
+    viewportHeight = getViewportHeight();
+    resetLayerGeometry();
   };
 
-  window.addEventListener('resize', handleResize, { passive: true });
-  window.addEventListener('orientationchange', handleResize, { passive: true });
-  window.visualViewport?.addEventListener('resize', handleResize, { passive: true });
+  window.addEventListener(
+    'resize',
+    handleResize,
+    { passive: true }
+  );
+
+  window.addEventListener(
+    'orientationchange',
+    handleResize,
+    { passive: true }
+  );
+
+  window.visualViewport?.addEventListener(
+    'resize',
+    handleResize,
+    { passive: true }
+  );
 
   /* =========================================================
      VISIBILITY RECOVERY
      ========================================================= */
 
   const recoverVisibleState = () => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
 
-    clearAnimation();
-    resetQueue();
-    resetActiveCommit();
+    clearMotion();
 
-    dragging = false;
-    touchBlocked = false;
     isAnimating = false;
-    preparedDir = 0;
-    dy = 0;
-    dx = 0;
-    gestureHeight = vh();
+    dragging = false;
+    axisLocked = false;
+    verticalGesture = false;
 
-    resetTransformsNoAnim();
+    pointerId = null;
 
-    requestAnimationFrame(() => {
-      warmForwardNext();
-      warmBackwardNext();
-    });
+    dragY = 0;
+    velocityY = 0;
+    viewportHeight = getViewportHeight();
+
+    syncContent();
+    resetLayerGeometry();
   };
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') recoverVisibleState();
-  }, { passive: true });
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+      if (
+        document.visibilityState ===
+        'visible'
+      ) {
+        recoverVisibleState();
+      }
+    },
+    { passive: true }
+  );
 
-  window.addEventListener('pageshow', recoverVisibleState, { passive: true });
+  window.addEventListener(
+    'pageshow',
+    recoverVisibleState,
+    { passive: true }
+  );
 
   /* =========================================================
      CLEANUP
      ========================================================= */
 
-  window.addEventListener('pagehide', () => {
-    clearAnimation();
-    resetQueue();
-    resetActiveCommit();
+  window.addEventListener(
+    'pagehide',
+    () => {
+      clearMotion();
 
-    window.removeEventListener('vb:gallery-open-view', handleGalleryOpenRequest);
-    window.removeEventListener('keydown', handleKeyDown);
-    window.removeEventListener('resize', handleResize);
-    window.removeEventListener('orientationchange', handleResize);
-    window.visualViewport?.removeEventListener('resize', handleResize);
+      window.removeEventListener(
+        'vb:gallery-open-view',
+        handleGalleryOpenRequest
+      );
 
-    dragging = false;
-    isAnimating = false;
-    isOpen = false;
-  }, { once: true });
+      window.removeEventListener(
+        'keydown',
+        handleKeyDown
+      );
+
+      window.removeEventListener(
+        'resize',
+        handleResize
+      );
+
+      window.removeEventListener(
+        'orientationchange',
+        handleResize
+      );
+
+      window.visualViewport?.removeEventListener(
+        'resize',
+        handleResize
+      );
+
+      isOpen = false;
+      isAnimating = false;
+      dragging = false;
+
+      pointerId = null;
+    },
+    { once: true }
+  );
 })();
