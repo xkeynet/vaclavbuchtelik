@@ -21,7 +21,7 @@
   const normalizeIndex = index => art.length ? ((index % art.length) + art.length) % art.length : 0;
 
   /* =========================================================
-     IMAGE PRELOAD / DECODE
+     IMAGE PRELOAD
      ========================================================= */
 
   const preloadArtwork = artwork => {
@@ -42,23 +42,6 @@
   const preloadAround = index => {
     if (!art.length) return;
     [-3, -2, -1, 0, 1, 2, 3].forEach(offset => preloadArtwork(art[normalizeIndex(index + offset)]));
-  };
-
-  const decodeArtwork = artwork => {
-    const image = preloadArtwork(artwork);
-    if (!image) return Promise.resolve();
-
-    if (image.complete && image.naturalWidth > 0) {
-      if (typeof image.decode !== 'function') return Promise.resolve();
-      return image.decode().catch(() => {});
-    }
-
-    if (typeof image.decode === 'function') return image.decode().catch(() => {});
-
-    return new Promise(resolve => {
-      image.addEventListener('load', resolve, { once: true });
-      image.addEventListener('error', resolve, { once: true });
-    });
   };
 
   /* =========================================================
@@ -131,7 +114,11 @@
 
     if (image) {
       const absoluteSrc = new URL(artwork.src, window.location.href).href;
-      if (image.src !== absoluteSrc) image.src = artwork.src;
+
+      if (image.src !== absoluteSrc) {
+        image.src = artwork.src;
+      }
+
       image.alt = artwork.title || '';
     }
 
@@ -178,7 +165,10 @@
 
   const dispatchSlideChange = () => {
     window.dispatchEvent(new CustomEvent('vb:gallery-slide-change', {
-      detail: { index: currentIndex, artwork: art[currentIndex] }
+      detail: {
+        index: currentIndex,
+        artwork: art[currentIndex]
+      }
     }));
   };
 
@@ -397,10 +387,10 @@
 
   /* =========================================================
      OPEN
-     PREPARE -> DECODE -> PAINT -> REVEAL
+     PREPARE -> TAKE OVER SCREEN -> REVEAL
      ========================================================= */
 
-  const openGallery = async (requestedIndex = 0) => {
+  const openGallery = (requestedIndex = 0) => {
     if (isOpen || opening) return;
 
     art = Array.isArray(window.ART) ? window.ART : [];
@@ -423,36 +413,11 @@
       : 0;
 
     /*
-     * Gallery stays fully hidden while all three layers
-     * receive their final content and geometry.
+     * Prepare CURRENT + neighbours synchronously.
+     * There is deliberately NO await/decode gate here.
      */
-    gallery.classList.remove('is-visible', 'is-open');
-    gallery.setAttribute('aria-hidden', 'true');
-
     syncContent();
     resetLayerGeometry();
-
-    /*
-     * The CURRENT artwork must be decoded before the viewer
-     * is allowed to become visible. This removes the opening
-     * frame in which the underlying main artwork could flash.
-     */
-    await decodeArtwork(art[currentIndex]);
-
-    if (
-      token !== openToken ||
-      !gallery ||
-      !opening
-    ) {
-      return;
-    }
-
-    /*
-     * Force the prepared CURRENT layer into layout while the
-     * gallery itself is still hidden.
-     */
-    resetLayerGeometry();
-    void gallery.offsetHeight;
 
     previousBodyOverflow = document.body.style.overflow;
     previousHtmlOverflow = document.documentElement.style.overflow;
@@ -462,51 +427,35 @@
     document.documentElement.style.overflow = 'hidden';
     document.body.style.touchAction = 'none';
 
+    /*
+     * Gallery takes ownership of the screen immediately.
+     * MAIN must never become an intermediate visible frame.
+     */
     gallery.setAttribute('aria-hidden', 'false');
-    gallery.classList.add('is-open');
-
-    /*
-     * First paint: gallery exists above the main view,
-     * but is not yet visually revealed.
-     */
-    await new Promise(resolve => requestAnimationFrame(resolve));
-
-    if (
-      token !== openToken ||
-      !gallery ||
-      !opening
-    ) {
-      return;
-    }
-
-    resetLayerGeometry();
-
-    /*
-     * Second paint: reveal only after the prepared artwork
-     * has occupied the gallery layer.
-     */
-    await new Promise(resolve => requestAnimationFrame(resolve));
-
-    if (
-      token !== openToken ||
-      !gallery ||
-      !opening
-    ) {
-      return;
-    }
+    gallery.classList.add('is-open', 'is-visible');
 
     opening = false;
     isOpen = true;
-
-    gallery.classList.add('is-visible');
 
     activateSwipeEngine();
 
     window.removeEventListener('keydown', handleKeyDown);
     window.addEventListener('keydown', handleKeyDown);
 
+    /*
+     * Preload/decode continues in the background.
+     * It never blocks opening the viewer.
+     */
+    preloadArtwork(art[currentIndex])?.decode?.().catch(() => {});
+
     requestAnimationFrame(() => {
-      if (!gallery || !isOpen) return;
+      if (
+        token !== openToken ||
+        !gallery ||
+        !isOpen
+      ) {
+        return;
+      }
 
       resetLayerGeometry();
       swipeEngine?.resize?.();
