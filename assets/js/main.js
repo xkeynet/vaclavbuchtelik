@@ -25,13 +25,6 @@
     '/assets/icons/arrow-down.svg';
 
   /* =========================================================
-     ROUTES
-     ========================================================= */
-
-  const GALLERY_URL =
-    '/gallery/';
-
-  /* =========================================================
      MENU ICON PRELOAD
      ========================================================= */
 
@@ -460,24 +453,40 @@
       'main-menu__art'
     );
 
-    const galleryLink = createElement(
-      'a',
+    const galleryButton = createElement(
+      'button',
       'main-menu__art-gallery'
     );
 
-    galleryLink.href =
-      GALLERY_URL;
+    galleryButton.type =
+      'button';
 
-    galleryLink.textContent =
+    galleryButton.textContent =
       'GALLERY';
 
-    galleryLink.setAttribute(
+    galleryButton.setAttribute(
       'aria-label',
       'Open Gallery'
     );
 
+    galleryButton.addEventListener(
+      'click',
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        closeMainMenu();
+
+        window.dispatchEvent(
+          new CustomEvent(
+            'vb:gallery-open-view'
+          )
+        );
+      }
+    );
+
     art.appendChild(
-      galleryLink
+      galleryButton
     );
 
     return art;
