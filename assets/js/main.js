@@ -2,525 +2,253 @@
 
 /* =========================================================
    VÁCLAV BUCHTELÍK — MAIN
+   MAIN VIEW + MENU STATE
    ========================================================= */
 
 (() => {
   /* =========================================================
-     ASSETS
+     CONFIG
      ========================================================= */
 
-  const MAIN_LOGO_SRC =
-    '/assets/vb-logo2.png';
-
-  const HAMBURGER_ICON_SRC =
-    '/assets/icons/hamburger.svg';
-
-  const CROSS_ICON_SRC =
-    '/assets/icons/cross.svg';
-
-  const SEARCH_ICON_SRC =
-    '/assets/icons/search.svg';
-
-  const CHEVRON_ICON_SRC =
-    '/assets/icons/arrow-down.svg';
-
-  /* =========================================================
-     MENU ICON PRELOAD
-     ========================================================= */
-
-  const crossIconPreload =
-    new Image();
-
-  crossIconPreload.decoding =
-    'sync';
-
-  crossIconPreload.src =
-    CROSS_ICON_SRC;
-
-  /* =========================================================
-     TIMING
-     ========================================================= */
+  const ASSETS = {
+    logo: '/assets/vb-logo2.png',
+    hamburger: '/assets/icons/hamburger.svg',
+    cross: '/assets/icons/cross.svg',
+    search: '/assets/icons/search.svg',
+    chevron: '/assets/icons/arrow-down.svg'
+  };
 
   const MAIN_LOGO_DELAY_MS = 3000;
   const MAIN_LOGO_ANIMATION_MS = 2400;
+  const ART_MENU_KEY = 'art';
 
   /* =========================================================
      STATE
      ========================================================= */
 
   let mainCreated = false;
+  let menuOpen = false;
+  let activeIndex = 0;
+  let openIndex = -1;
+  let draggingSaber = false;
 
   let mainLogoTimer = null;
   let mainControlsTimer = null;
-
-  let activeIndex = 0;
-  let openIndex = -1;
-
-  let menuOpen = false;
-  let draggingSaber = false;
-
   let saberSyncFrame = null;
   let menuResizeObserver = null;
 
-  /* =========================================================
-     REFERENCES
-     ========================================================= */
-
   let mainView = null;
-
   let menuButton = null;
   let menuIcon = null;
-
   let menuList = null;
   let menuItems = [];
-
   let saber = null;
   let saberHandle = null;
 
   /* =========================================================
-     ELEMENT HELPERS
+     HELPERS
      ========================================================= */
 
-  const createElement = (
-    tagName,
-    className = ''
-  ) => {
-    const element =
-      document.createElement(tagName);
-
-    if (className) {
-      element.className = className;
-    }
-
+  const createElement = (tagName, className = '') => {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
     return element;
   };
 
-  const createIcon = (
-    src,
-    className,
-    alt = ''
-  ) => {
-    const image =
-      document.createElement('img');
-
+  const createIcon = (src, className, alt = '') => {
+    const image = document.createElement('img');
     image.className = className;
     image.src = src;
     image.alt = alt;
-
     image.decoding = 'async';
     image.draggable = false;
-
     return image;
   };
 
-  /* =========================================================
-     MENU ICON STATE
-     ========================================================= */
+  const getMenuItemIndex = key => menuItems.findIndex(item => item.dataset.key === key);
 
-  const syncMenuIcon = () => {
-    if (
-      !menuButton ||
-      !menuIcon
-    ) {
-      return;
-    }
-
-    menuIcon.src =
-      menuOpen
-        ? CROSS_ICON_SRC
-        : HAMBURGER_ICON_SRC;
-
-    menuButton.setAttribute(
-      'aria-label',
-      menuOpen
-        ? 'Close menu'
-        : 'Menu'
-    );
-
-    menuButton.setAttribute(
-      'aria-expanded',
-      menuOpen
-        ? 'true'
-        : 'false'
-    );
-  };
+  const crossIconPreload = new Image();
+  crossIconPreload.decoding = 'sync';
+  crossIconPreload.src = ASSETS.cross;
 
   /* =========================================================
      MENU VISIBILITY
      ========================================================= */
 
+  const syncMenuIcon = () => {
+    if (!menuButton || !menuIcon) return;
+
+    menuIcon.src = menuOpen ? ASSETS.cross : ASSETS.hamburger;
+    menuButton.setAttribute('aria-label', menuOpen ? 'Close menu' : 'Menu');
+    menuButton.setAttribute('aria-expanded', menuOpen ? 'true' : 'false');
+  };
+
   const openMainMenu = () => {
-    if (
-      !mainView ||
-      menuOpen
-    ) {
-      return;
-    }
+    if (!mainView || menuOpen) return;
 
     menuOpen = true;
-
+    mainView.classList.add('is-menu-visible');
     syncMenuIcon();
 
-    mainView.classList.add(
-      'is-menu-visible'
-    );
-
-    window.requestAnimationFrame(
-      () => {
-        window.requestAnimationFrame(
-          () => {
-            scheduleSaberSync();
-          }
-        );
-      }
-    );
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scheduleSaberSync);
+    });
   };
 
   const closeMainMenu = () => {
-    if (
-      !mainView ||
-      !menuOpen
-    ) {
-      return;
-    }
+    if (!mainView || !menuOpen) return;
 
     menuOpen = false;
-
-    mainView.classList.remove(
-      'is-menu-visible'
-    );
-
+    mainView.classList.remove('is-menu-visible');
     syncMenuIcon();
   };
 
   const toggleMainMenu = () => {
-    if (menuOpen) {
-      closeMainMenu();
-      return;
-    }
-
-    openMainMenu();
+    if (menuOpen) closeMainMenu();
+    else openMainMenu();
   };
 
   /* =========================================================
-     MAIN HEADER
+     HEADER
      ========================================================= */
 
   const createHeader = () => {
-    const header = createElement(
-      'header',
-      'main-view__header'
-    );
+    const header = createElement('header', 'main-view__header');
 
-    /* ---------------------------------------------------------
-       HAMBURGER / CLOSE
-       --------------------------------------------------------- */
-
-    menuButton = createElement(
-      'button',
-      'main-view__header-button main-view__header-button--menu'
-    );
-
+    menuButton = createElement('button', 'main-view__header-button main-view__header-button--menu');
     menuButton.type = 'button';
-
-    menuButton.setAttribute(
-      'aria-label',
-      'Menu'
-    );
-
-    menuButton.setAttribute(
-      'aria-expanded',
-      'false'
-    );
+    menuButton.setAttribute('aria-label', 'Menu');
+    menuButton.setAttribute('aria-expanded', 'false');
 
     menuIcon = createIcon(
-      HAMBURGER_ICON_SRC,
+      ASSETS.hamburger,
       'main-view__header-icon main-view__header-icon--hamburger'
     );
+    menuIcon.id = 'mainMenuControlIcon';
 
-    menuIcon.id =
-      'mainMenuControlIcon';
-
-    menuButton.appendChild(
-      menuIcon
-    );
-
-    menuButton.addEventListener(
-      'click',
-      (event) => {
-        event.preventDefault();
-
-        toggleMainMenu();
-      }
-    );
-
-    /* ---------------------------------------------------------
-       SEARCH
-       --------------------------------------------------------- */
+    menuButton.appendChild(menuIcon);
+    menuButton.addEventListener('click', event => {
+      event.preventDefault();
+      toggleMainMenu();
+    });
 
     const searchButton = createElement(
       'button',
       'main-view__header-button main-view__header-button--search'
     );
-
     searchButton.type = 'button';
-
-    searchButton.setAttribute(
-      'aria-label',
-      'Search'
-    );
+    searchButton.setAttribute('aria-label', 'Search');
 
     const searchIcon = createIcon(
-      SEARCH_ICON_SRC,
+      ASSETS.search,
       'main-view__header-icon main-view__header-icon--search'
     );
 
-    searchButton.appendChild(
-      searchIcon
-    );
-
-    /* ---------------------------------------------------------
-       HEADER STRUCTURE
-       --------------------------------------------------------- */
-
-    header.appendChild(
-      menuButton
-    );
-
-    header.appendChild(
-      searchButton
-    );
+    searchButton.appendChild(searchIcon);
+    header.append(menuButton, searchButton);
 
     return header;
   };
 
   /* =========================================================
-     MAIN LOGO
+     LOGO
      ========================================================= */
 
   const createLogo = () => {
-    const logo = createIcon(
-      MAIN_LOGO_SRC,
-      'main-view__logo',
-      'Václav Buchtelík'
-    );
-
+    const logo = createIcon(ASSETS.logo, 'main-view__logo', 'Václav Buchtelík');
     logo.id = 'mainLogo';
-
     return logo;
   };
 
   /* =========================================================
-     CHEVRON
+     MENU BUILDERS
      ========================================================= */
 
-  const createChevronButton = (
-    label
-  ) => {
-    const button = createElement(
-      'button',
-      'main-menu__chevron-button'
-    );
-
+  const createChevronButton = label => {
+    const button = createElement('button', 'main-menu__chevron-button');
     button.type = 'button';
+    button.setAttribute('aria-label', `Open ${label}`);
+    button.setAttribute('aria-expanded', 'false');
 
-    button.setAttribute(
-      'aria-label',
-      `Open ${label}`
-    );
-
-    button.setAttribute(
-      'aria-expanded',
-      'false'
-    );
-
-    const icon = createIcon(
-      CHEVRON_ICON_SRC,
-      'main-menu__chevron'
-    );
-
-    icon.setAttribute(
-      'aria-hidden',
-      'true'
-    );
-
+    const icon = createIcon(ASSETS.chevron, 'main-menu__chevron');
+    icon.setAttribute('aria-hidden', 'true');
     icon.dataset.turns = '0';
+    icon.style.setProperty('--chev-spin', '0deg');
 
-    icon.style.setProperty(
-      '--chev-spin',
-      '0deg'
-    );
-
-    button.appendChild(
-      icon
-    );
-
+    button.appendChild(icon);
     return button;
   };
 
-  /* =========================================================
-     MENU ITEM
-     ========================================================= */
-
-  const createMenuItem = (
-    key,
-    label
-  ) => {
-    const item = createElement(
-      'li',
-      'main-menu__item'
-    );
+  const createMenuItem = (key, label) => {
+    const item = createElement('li', 'main-menu__item');
+    const labelElement = createElement('span', 'main-menu__label');
 
     item.dataset.key = key;
-
-    const labelElement = createElement(
-      'span',
-      'main-menu__label'
-    );
-
     labelElement.textContent = label;
 
-    const chevronButton =
-      createChevronButton(label);
-
-    item.appendChild(
-      labelElement
-    );
-
-    item.appendChild(
-      chevronButton
-    );
-
+    item.append(labelElement, createChevronButton(label));
     return item;
   };
 
-  /* =========================================================
-     MENU PANEL
-     ========================================================= */
+  const createMenuPanel = content => {
+    const panel = createElement('li', 'main-menu__panel');
+    const inner = createElement('div', 'main-menu__panel-inner');
 
-  const createMenuPanel = (
-    content
-  ) => {
-    const panel = createElement(
-      'li',
-      'main-menu__panel'
-    );
-
-    panel.setAttribute(
-      'aria-hidden',
-      'true'
-    );
-
-    const inner = createElement(
-      'div',
-      'main-menu__panel-inner'
-    );
-
-    if (content) {
-      inner.appendChild(content);
-    }
-
+    panel.setAttribute('aria-hidden', 'true');
+    if (content) inner.appendChild(content);
     panel.appendChild(inner);
 
     return panel;
   };
 
   /* =========================================================
-     ABOUT PANEL
+     MENU CONTENT
      ========================================================= */
 
   const createAboutContent = () => {
-    const about = createElement(
-      'div',
-      'main-menu__text main-menu__about'
-    );
-
-    about.innerHTML =
+    const about = createElement('div', 'main-menu__text main-menu__about');
+    about.textContent =
       'Václav Buchtelík is a Czech painter and collage artist born in 1990. ' +
       'He graduated from the Faculty of Art at the University of Ostrava under Daniel Balabán. ' +
       'He lives and works in Ostrava.';
-
     return about;
   };
 
-  /* =========================================================
-     MY ART PANEL
-     ========================================================= */
-
   const createArtContent = () => {
-    const art = createElement(
-      'div',
-      'main-menu__art'
-    );
+    const art = createElement('div', 'main-menu__art');
+    const galleryButton = createElement('button', 'main-menu__art-gallery');
 
-    const galleryButton = createElement(
-      'button',
-      'main-menu__art-gallery'
-    );
+    galleryButton.type = 'button';
+    galleryButton.textContent = 'GALLERY';
+    galleryButton.setAttribute('aria-label', 'Open Gallery');
 
-    galleryButton.type =
-      'button';
+    galleryButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
 
-    galleryButton.textContent =
-      'GALLERY';
+      /*
+       * MAIN owns the menu state.
+       * The MY ART panel remains logically open while the fullscreen
+       * gallery temporarily hides the menu.
+       */
+      closeMainMenu();
+      window.dispatchEvent(new CustomEvent('vb:gallery-open-view'));
+    });
 
-    galleryButton.setAttribute(
-      'aria-label',
-      'Open Gallery'
-    );
-
-    galleryButton.addEventListener(
-      'click',
-      (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-
-        closeMainMenu();
-
-        window.dispatchEvent(
-          new CustomEvent(
-            'vb:gallery-open-view'
-          )
-        );
-      }
-    );
-
-    art.appendChild(
-      galleryButton
-    );
-
+    art.appendChild(galleryButton);
     return art;
   };
 
-  /* =========================================================
-     VISION PANEL
-     ========================================================= */
-
   const createVisionContent = () => {
-    const vision = createElement(
-      'div',
-      'main-menu__text main-menu__vision'
-    );
-
+    const vision = createElement('div', 'main-menu__text main-menu__vision');
     vision.textContent =
       'Václav Buchtelík develops an expressive body of work concerned with anxiety, societal fears and apocalyptic themes.';
-
     return vision;
   };
 
-  /* =========================================================
-     CONTACT PANEL
-     ========================================================= */
-
   const createContactContent = () => {
-    const contact = createElement(
-      'div',
-      'main-menu__text main-menu__contact'
-    );
-
-    contact.textContent =
-      'Contact information will be added here.';
-
+    const contact = createElement('div', 'main-menu__text main-menu__contact');
+    contact.textContent = 'Contact information will be added here.';
     return contact;
   };
 
@@ -529,34 +257,16 @@
      ========================================================= */
 
   const createSaberSlot = () => {
-    const slot = createElement(
-      'li',
-      'main-menu__saber-slot'
-    );
+    const slot = createElement('li', 'main-menu__saber-slot');
+    slot.setAttribute('aria-hidden', 'true');
 
-    slot.setAttribute(
-      'aria-hidden',
-      'true'
-    );
-
-    saber = createElement(
-      'div',
-      'main-menu__saber'
-    );
-
+    saber = createElement('div', 'main-menu__saber');
     saber.id = 'mainMenuSaber';
 
-    saberHandle = createElement(
-      'div',
-      'main-menu__saber-handle'
-    );
+    saberHandle = createElement('div', 'main-menu__saber-handle');
+    saberHandle.id = 'mainMenuSaberHandle';
 
-    saberHandle.id =
-      'mainMenuSaberHandle';
-
-    slot.appendChild(saber);
-    slot.appendChild(saberHandle);
-
+    slot.append(saber, saberHandle);
     return slot;
   };
 
@@ -565,124 +275,30 @@
      ========================================================= */
 
   const createMenu = () => {
-    const menu = createElement(
-      'nav',
-      'main-menu'
-    );
+    const menu = createElement('nav', 'main-menu');
+    const content = createElement('div', 'main-menu__content');
 
-    menu.setAttribute(
-      'aria-label',
-      'Main navigation'
-    );
+    menu.setAttribute('aria-label', 'Main navigation');
 
-    const content = createElement(
-      'div',
-      'main-menu__content'
-    );
-
-    menuList = createElement(
-      'ul',
-      'main-menu__list'
-    );
-
+    menuList = createElement('ul', 'main-menu__list');
     menuList.id = 'mainMenuList';
 
-    /* ---------------------------------------------------------
-       SABER
-       --------------------------------------------------------- */
-
-    menuList.appendChild(
-      createSaberSlot()
+    menuList.append(
+      createSaberSlot(),
+      createMenuItem('about', 'ABOUT'),
+      createMenuPanel(createAboutContent()),
+      createMenuItem('art', 'MY ART'),
+      createMenuPanel(createArtContent()),
+      createMenuItem('vision', 'VISION'),
+      createMenuPanel(createVisionContent()),
+      createMenuItem('contact', 'CONTACT'),
+      createMenuPanel(createContactContent())
     );
 
-    /* ---------------------------------------------------------
-       ABOUT
-       --------------------------------------------------------- */
+    const divider = createElement('div', 'main-menu__divider');
 
-    menuList.appendChild(
-      createMenuItem(
-        'about',
-        'ABOUT'
-      )
-    );
-
-    menuList.appendChild(
-      createMenuPanel(
-        createAboutContent()
-      )
-    );
-
-    /* ---------------------------------------------------------
-       MY ART
-       --------------------------------------------------------- */
-
-    menuList.appendChild(
-      createMenuItem(
-        'art',
-        'MY ART'
-      )
-    );
-
-    menuList.appendChild(
-      createMenuPanel(
-        createArtContent()
-      )
-    );
-
-    /* ---------------------------------------------------------
-       VISION
-       --------------------------------------------------------- */
-
-    menuList.appendChild(
-      createMenuItem(
-        'vision',
-        'VISION'
-      )
-    );
-
-    menuList.appendChild(
-      createMenuPanel(
-        createVisionContent()
-      )
-    );
-
-    /* ---------------------------------------------------------
-       CONTACT
-       --------------------------------------------------------- */
-
-    menuList.appendChild(
-      createMenuItem(
-        'contact',
-        'CONTACT'
-      )
-    );
-
-    menuList.appendChild(
-      createMenuPanel(
-        createContactContent()
-      )
-    );
-
-    /* ---------------------------------------------------------
-       DIVIDER
-       --------------------------------------------------------- */
-
-    const divider = createElement(
-      'div',
-      'main-menu__divider'
-    );
-
-    content.appendChild(
-      menuList
-    );
-
-    content.appendChild(
-      divider
-    );
-
-    menu.appendChild(
-      content
-    );
+    content.append(menuList, divider);
+    menu.appendChild(content);
 
     return menu;
   };
@@ -692,424 +308,165 @@
      ========================================================= */
 
   const syncSaberToActive = () => {
-    if (
-      !menuList ||
-      !saber ||
-      !menuItems.length
-    ) {
-      return;
-    }
+    if (!menuList || !saber || !menuItems.length) return;
 
-    const activeItem =
-      menuItems[activeIndex];
+    const activeItem = menuItems[activeIndex];
+    const lastItem = menuItems[menuItems.length - 1];
+    if (!activeItem || !lastItem) return;
 
-    if (!activeItem) {
-      return;
-    }
+    const listRect = menuList.getBoundingClientRect();
+    const itemRect = activeItem.getBoundingClientRect();
+    const lastRect = lastItem.getBoundingClientRect();
+    const saberHeight = parseFloat(getComputedStyle(saber).height);
 
-    const listRect =
-      menuList.getBoundingClientRect();
+    if (!Number.isFinite(saberHeight)) return;
 
-    const itemRect =
-      activeItem.getBoundingClientRect();
-
-    const saberHeight =
-      parseFloat(
-        window
-          .getComputedStyle(saber)
-          .height
-      );
-
-    if (
-      !Number.isFinite(
-        saberHeight
-      )
-    ) {
-      return;
-    }
-
-    let y =
-      (
-        itemRect.top -
-        listRect.top
-      ) +
-      (
-        itemRect.height / 2
-      ) -
-      (
-        saberHeight / 2
-      );
-
-    const lastItem =
-      menuItems[
-        menuItems.length - 1
-      ];
-
-    const lastRect =
-      lastItem.getBoundingClientRect();
+    const itemCenterY =
+      itemRect.top - listRect.top + itemRect.height / 2 - saberHeight / 2;
 
     const lastCenterY =
-      (
-        lastRect.top -
-        listRect.top
-      ) +
-      (
-        lastRect.height / 2
-      ) -
-      (
-        saberHeight / 2
-      );
+      lastRect.top - listRect.top + lastRect.height / 2 - saberHeight / 2;
 
-    const maxY =
-      Math.max(
-        0,
-        lastCenterY
-      );
-
-    y =
-      Math.max(
-        0,
-        Math.min(
-          y,
-          maxY
-        )
-      );
-
-    saber.style.transform =
-      `translate3d(0, ${y}px, 0)`;
+    const y = Math.max(0, Math.min(itemCenterY, Math.max(0, lastCenterY)));
+    saber.style.transform = `translate3d(0, ${y}px, 0)`;
   };
-
-  /* =========================================================
-     SABER SYNC SCHEDULER
-     ========================================================= */
 
   const scheduleSaberSync = () => {
-    if (saberSyncFrame !== null) {
-      window.cancelAnimationFrame(
-        saberSyncFrame
-      );
-    }
+    if (saberSyncFrame !== null) cancelAnimationFrame(saberSyncFrame);
 
-    saberSyncFrame =
-      window.requestAnimationFrame(
-        () => {
-          saberSyncFrame = null;
-
-          syncSaberToActive();
-        }
-      );
+    saberSyncFrame = requestAnimationFrame(() => {
+      saberSyncFrame = null;
+      syncSaberToActive();
+    });
   };
-
-  /* =========================================================
-     SABER LAYOUT OBSERVER
-     ========================================================= */
 
   const bindSaberLayoutSync = () => {
-    if (!menuList) {
-      return;
-    }
+    if (!menuList) return;
 
-    const panels = Array.from(
-      menuList.querySelectorAll(
-        '.main-menu__panel'
-      )
-    );
+    const panels = Array.from(menuList.querySelectorAll('.main-menu__panel'));
 
-    panels.forEach(
-      (panel) => {
-        panel.addEventListener(
-          'transitionrun',
-          scheduleSaberSync
-        );
+    panels.forEach(panel => {
+      panel.addEventListener('transitionrun', scheduleSaberSync);
+      panel.addEventListener('transitionend', scheduleSaberSync);
+      panel.addEventListener('transitioncancel', scheduleSaberSync);
+    });
 
-        panel.addEventListener(
-          'transitionend',
-          scheduleSaberSync
-        );
+    if (typeof ResizeObserver === 'undefined') return;
 
-        panel.addEventListener(
-          'transitioncancel',
-          scheduleSaberSync
-        );
-      }
-    );
+    menuResizeObserver = new ResizeObserver(scheduleSaberSync);
+    menuResizeObserver.observe(menuList);
 
-    if (
-      typeof ResizeObserver ===
-      'undefined'
-    ) {
-      return;
-    }
+    menuItems.forEach(item => menuResizeObserver.observe(item));
 
-    menuResizeObserver =
-      new ResizeObserver(
-        () => {
-          scheduleSaberSync();
-        }
-      );
+    panels.forEach(panel => {
+      menuResizeObserver.observe(panel);
 
-    menuResizeObserver.observe(
-      menuList
-    );
-
-    menuItems.forEach(
-      (item) => {
-        menuResizeObserver.observe(
-          item
-        );
-      }
-    );
-
-    panels.forEach(
-      (panel) => {
-        menuResizeObserver.observe(
-          panel
-        );
-
-        const inner =
-          panel.querySelector(
-            '.main-menu__panel-inner'
-          );
-
-        if (inner) {
-          menuResizeObserver.observe(
-            inner
-          );
-        }
-      }
-    );
+      const inner = panel.querySelector('.main-menu__panel-inner');
+      if (inner) menuResizeObserver.observe(inner);
+    });
   };
 
   /* =========================================================
-     ACTIVE ITEM
+     MENU STATE
      ========================================================= */
 
-  const setActive = (index) => {
-    if (!menuItems.length) {
-      return;
-    }
+  const setActive = index => {
+    if (!menuItems.length) return;
 
-    const next =
-      Math.max(
-        0,
-        Math.min(
-          menuItems.length - 1,
-          index
-        )
-      );
+    const next = Math.max(0, Math.min(menuItems.length - 1, index));
 
-    menuItems.forEach(
-      (item, itemIndex) => {
-        item.classList.toggle(
-          'is-active',
-          itemIndex === next
-        );
-      }
-    );
+    menuItems.forEach((item, itemIndex) => {
+      item.classList.toggle('is-active', itemIndex === next);
+    });
 
     activeIndex = next;
-
     scheduleSaberSync();
   };
 
-  /* =========================================================
-     CHEVRON ROTATION
-     ========================================================= */
+  const spinChevron = (item, isOpen) => {
+    const chevron = item?.querySelector('.main-menu__chevron');
+    if (!chevron) return;
 
-  const spinChevron = (
-    item,
-    isOpen
-  ) => {
-    const chevron =
-      item.querySelector(
-        '.main-menu__chevron'
-      );
+    const nextTurns = parseInt(chevron.dataset.turns || '0', 10) + 1;
+    const baseAngle = isOpen ? 180 : 0;
 
-    if (!chevron) {
-      return;
-    }
-
-    const currentTurns =
-      parseInt(
-        chevron.dataset.turns || '0',
-        10
-      );
-
-    const nextTurns =
-      currentTurns + 1;
-
-    chevron.dataset.turns =
-      String(nextTurns);
-
-    const baseAngle =
-      isOpen
-        ? 180
-        : 0;
-
-    const angle =
-      (
-        nextTurns * 360
-      ) +
-      baseAngle;
-
-    chevron.style.setProperty(
-      '--chev-spin',
-      `${angle}deg`
-    );
+    chevron.dataset.turns = String(nextTurns);
+    chevron.style.setProperty('--chev-spin', `${nextTurns * 360 + baseAngle}deg`);
   };
 
-  /* =========================================================
-     PANEL HELPERS
-     ========================================================= */
-
-  const getPanelForItem = (
-    item
-  ) => {
-    if (!item) {
-      return null;
-    }
-
-    const panel =
-      item.nextElementSibling;
-
-    if (
-      !panel ||
-      !panel.classList.contains(
-        'main-menu__panel'
-      )
-    ) {
-      return null;
-    }
-
-    return panel;
+  const getPanelForItem = item => {
+    const panel = item?.nextElementSibling;
+    return panel?.classList.contains('main-menu__panel') ? panel : null;
   };
 
-  /* =========================================================
-     CLOSE ITEM
-     ========================================================= */
+  const closeItem = index => {
+    const item = menuItems[index];
+    if (!item) return;
 
-  const closeItem = (
-    index
-  ) => {
-    const item =
-      menuItems[index];
+    item.classList.remove('is-open');
+    spinChevron(item, false);
 
-    if (!item) {
-      return;
-    }
+    const button = item.querySelector('.main-menu__chevron-button');
+    if (button) button.setAttribute('aria-expanded', 'false');
 
-    item.classList.remove(
-      'is-open'
-    );
+    const panel = getPanelForItem(item);
+    if (panel) panel.setAttribute('aria-hidden', 'true');
 
-    spinChevron(
-      item,
-      false
-    );
-
-    const button =
-      item.querySelector(
-        '.main-menu__chevron-button'
-      );
-
-    if (button) {
-      button.setAttribute(
-        'aria-expanded',
-        'false'
-      );
-    }
-
-    const panel =
-      getPanelForItem(item);
-
-    if (panel) {
-      panel.setAttribute(
-        'aria-hidden',
-        'true'
-      );
-    }
-
-    if (openIndex === index) {
-      openIndex = -1;
-    }
-
+    if (openIndex === index) openIndex = -1;
     scheduleSaberSync();
   };
 
-  /* =========================================================
-     OPEN ITEM
-     ========================================================= */
+  const openItem = index => {
+    if (index < 0 || index >= menuItems.length || openIndex === index) return;
 
-  const openItem = (
-    index
-  ) => {
-    if (
-      index < 0 ||
-      index >= menuItems.length
-    ) {
-      return;
-    }
+    if (openIndex !== -1) closeItem(openIndex);
 
-    if (openIndex === index) {
-      return;
-    }
+    const item = menuItems[index];
+    item.classList.add('is-open');
+    spinChevron(item, true);
 
-    if (openIndex !== -1) {
-      closeItem(openIndex);
-    }
+    const button = item.querySelector('.main-menu__chevron-button');
+    if (button) button.setAttribute('aria-expanded', 'true');
 
-    const item =
-      menuItems[index];
-
-    item.classList.add(
-      'is-open'
-    );
-
-    spinChevron(
-      item,
-      true
-    );
-
-    const button =
-      item.querySelector(
-        '.main-menu__chevron-button'
-      );
-
-    if (button) {
-      button.setAttribute(
-        'aria-expanded',
-        'true'
-      );
-    }
-
-    const panel =
-      getPanelForItem(item);
-
-    if (panel) {
-      panel.setAttribute(
-        'aria-hidden',
-        'false'
-      );
-    }
+    const panel = getPanelForItem(item);
+    if (panel) panel.setAttribute('aria-hidden', 'false');
 
     openIndex = index;
-
     scheduleSaberSync();
   };
 
+  const toggleItem = index => {
+    if (openIndex === index) closeItem(index);
+    else openItem(index);
+  };
+
   /* =========================================================
-     TOGGLE ITEM
+     GALLERY STATE CONTRACT
      ========================================================= */
 
-  const toggleItem = (
-    index
-  ) => {
-    if (openIndex === index) {
-      closeItem(index);
-      return;
-    }
+  const restoreArtMenuAfterGallery = () => {
+    if (!mainView || !menuItems.length) return;
 
-    openItem(index);
+    const artIndex = getMenuItemIndex(ART_MENU_KEY);
+    if (artIndex === -1) return;
+
+    /*
+     * Restore exactly the state from which GALLERY is entered:
+     * MAIN menu visible + MY ART active + MY ART panel open.
+     */
+    setActive(artIndex);
+
+    if (openIndex !== artIndex) openItem(artIndex);
+
+    openMainMenu();
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scheduleSaberSync);
+    });
+  };
+
+  const handleGalleryClosed = () => {
+    restoreArtMenuAfterGallery();
   };
 
   /* =========================================================
@@ -1117,254 +474,103 @@
      ========================================================= */
 
   const bindMenuEvents = () => {
-    menuItems = Array.from(
-      menuList.querySelectorAll(
-        '.main-menu__item'
-      )
-    );
+    menuItems = Array.from(menuList.querySelectorAll('.main-menu__item'));
+    if (!menuItems.length) return;
 
-    if (!menuItems.length) {
-      return;
-    }
+    menuItems.forEach((item, index) => {
+      const label = item.querySelector('.main-menu__label');
+      const button = item.querySelector('.main-menu__chevron-button');
 
-    menuItems.forEach(
-      (item, index) => {
-        const label =
-          item.querySelector(
-            '.main-menu__label'
-          );
+      label?.addEventListener('click', event => {
+        event.preventDefault();
+        setActive(index);
+      });
 
-        const button =
-          item.querySelector(
-            '.main-menu__chevron-button'
-          );
+      button?.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
 
-        if (label) {
-          label.addEventListener(
-            'click',
-            (event) => {
-              event.preventDefault();
-
-              setActive(index);
-            }
-          );
-        }
-
-        if (button) {
-          button.addEventListener(
-            'click',
-            (event) => {
-              event.preventDefault();
-              event.stopPropagation();
-
-              setActive(index);
-              toggleItem(index);
-            }
-          );
-        }
-      }
-    );
+        setActive(index);
+        toggleItem(index);
+      });
+    });
 
     setActive(0);
   };
 
   /* =========================================================
-     SABER HIT TEST
+     SABER HIT TEST + DRAG
      ========================================================= */
 
-  const pickIndexFromClientY = (
-    clientY
-  ) => {
+  const pickIndexFromClientY = clientY => {
     let bestIndex = 0;
     let bestDistance = Infinity;
 
-    menuItems.forEach(
-      (item, index) => {
-        const rect =
-          item.getBoundingClientRect();
+    menuItems.forEach((item, index) => {
+      const rect = item.getBoundingClientRect();
+      const distance = Math.abs(clientY - (rect.top + rect.height / 2));
 
-        const centerY =
-          rect.top +
-          (
-            rect.height / 2
-          );
-
-        const distance =
-          Math.abs(
-            clientY -
-            centerY
-          );
-
-        if (
-          distance <
-          bestDistance
-        ) {
-          bestDistance =
-            distance;
-
-          bestIndex =
-            index;
-        }
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
       }
-    );
+    });
 
     return bestIndex;
   };
 
-  /* =========================================================
-     SABER DRAG
-     ========================================================= */
-
   const bindSaberEvents = () => {
-    if (!saberHandle) {
-      return;
-    }
+    if (!saberHandle) return;
 
-    saberHandle.addEventListener(
-      'touchstart',
-      (event) => {
-        if (
-          !event.touches ||
-          !event.touches.length
-        ) {
-          return;
-        }
+    saberHandle.addEventListener('touchstart', event => {
+      if (!event.touches?.length) return;
 
-        draggingSaber = true;
+      draggingSaber = true;
+      setActive(pickIndexFromClientY(event.touches[0].clientY));
+    }, { passive: true });
 
-        const clientY =
-          event.touches[0].clientY;
+    saberHandle.addEventListener('touchmove', event => {
+      if (!draggingSaber || !event.touches?.length) return;
+      setActive(pickIndexFromClientY(event.touches[0].clientY));
+    }, { passive: true });
 
-        setActive(
-          pickIndexFromClientY(
-            clientY
-          )
-        );
-      },
-      {
-        passive: true
+    saberHandle.addEventListener('touchend', () => {
+      draggingSaber = false;
+      scheduleSaberSync();
+    }, { passive: true });
+
+    saberHandle.addEventListener('touchcancel', () => {
+      draggingSaber = false;
+      scheduleSaberSync();
+    }, { passive: true });
+
+    saberHandle.addEventListener('pointerdown', event => {
+      if (event.pointerType === 'touch') return;
+
+      draggingSaber = true;
+      saberHandle.setPointerCapture?.(event.pointerId);
+      setActive(pickIndexFromClientY(event.clientY));
+    });
+
+    saberHandle.addEventListener('pointermove', event => {
+      if (!draggingSaber || event.pointerType === 'touch') return;
+      setActive(pickIndexFromClientY(event.clientY));
+    });
+
+    saberHandle.addEventListener('pointerup', event => {
+      draggingSaber = false;
+
+      if (saberHandle.hasPointerCapture?.(event.pointerId)) {
+        saberHandle.releasePointerCapture(event.pointerId);
       }
-    );
 
-    saberHandle.addEventListener(
-      'touchmove',
-      (event) => {
-        if (
-          !draggingSaber ||
-          !event.touches ||
-          !event.touches.length
-        ) {
-          return;
-        }
+      scheduleSaberSync();
+    });
 
-        const clientY =
-          event.touches[0].clientY;
-
-        setActive(
-          pickIndexFromClientY(
-            clientY
-          )
-        );
-      },
-      {
-        passive: true
-      }
-    );
-
-    saberHandle.addEventListener(
-      'touchend',
-      () => {
-        draggingSaber = false;
-
-        scheduleSaberSync();
-      },
-      {
-        passive: true
-      }
-    );
-
-    saberHandle.addEventListener(
-      'touchcancel',
-      () => {
-        draggingSaber = false;
-
-        scheduleSaberSync();
-      },
-      {
-        passive: true
-      }
-    );
-
-    saberHandle.addEventListener(
-      'pointerdown',
-      (event) => {
-        if (
-          event.pointerType ===
-          'touch'
-        ) {
-          return;
-        }
-
-        draggingSaber = true;
-
-        saberHandle.setPointerCapture?.(
-          event.pointerId
-        );
-
-        setActive(
-          pickIndexFromClientY(
-            event.clientY
-          )
-        );
-      }
-    );
-
-    saberHandle.addEventListener(
-      'pointermove',
-      (event) => {
-        if (
-          !draggingSaber ||
-          event.pointerType ===
-            'touch'
-        ) {
-          return;
-        }
-
-        setActive(
-          pickIndexFromClientY(
-            event.clientY
-          )
-        );
-      }
-    );
-
-    saberHandle.addEventListener(
-      'pointerup',
-      (event) => {
-        draggingSaber = false;
-
-        if (
-          saberHandle.hasPointerCapture?.(
-            event.pointerId
-          )
-        ) {
-          saberHandle.releasePointerCapture(
-            event.pointerId
-          );
-        }
-
-        scheduleSaberSync();
-      }
-    );
-
-    saberHandle.addEventListener(
-      'pointercancel',
-      () => {
-        draggingSaber = false;
-
-        scheduleSaberSync();
-      }
-    );
+    saberHandle.addEventListener('pointercancel', () => {
+      draggingSaber = false;
+      scheduleSaberSync();
+    });
   };
 
   /* =========================================================
@@ -1372,50 +578,22 @@
      ========================================================= */
 
   const startMainArrival = () => {
-    if (!mainView) {
-      return;
-    }
+    if (!mainView) return;
 
-    mainLogoTimer =
-      window.setTimeout(
-        () => {
-          window.requestAnimationFrame(
-            () => {
-              window.requestAnimationFrame(
-                () => {
-                  if (!mainView) {
-                    return;
-                  }
+    mainLogoTimer = window.setTimeout(() => {
+      mainLogoTimer = null;
 
-                  mainView.classList.add(
-                    'is-logo-visible'
-                  );
-                }
-              );
-            }
-          );
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          mainView?.classList.add('is-logo-visible');
+        });
+      });
 
-          mainLogoTimer = null;
-
-          mainControlsTimer =
-            window.setTimeout(
-              () => {
-                if (!mainView) {
-                  return;
-                }
-
-                mainView.classList.add(
-                  'is-controls-visible'
-                );
-
-                mainControlsTimer =
-                  null;
-              },
-              MAIN_LOGO_ANIMATION_MS
-            );
-        },
-        MAIN_LOGO_DELAY_MS
-      );
+      mainControlsTimer = window.setTimeout(() => {
+        mainControlsTimer = null;
+        mainView?.classList.add('is-controls-visible');
+      }, MAIN_LOGO_ANIMATION_MS);
+    }, MAIN_LOGO_DELAY_MS);
   };
 
   /* =========================================================
@@ -1423,189 +601,75 @@
      ========================================================= */
 
   const createMain = () => {
-    if (mainCreated) {
-      return;
-    }
-
+    if (mainCreated) return;
     mainCreated = true;
 
-    mainView = createElement(
-      'section',
-      'main-view'
-    );
-
+    mainView = createElement('section', 'main-view');
     mainView.id = 'mainView';
+    mainView.setAttribute('aria-label', 'Václav Buchtelík main website');
 
-    mainView.setAttribute(
-      'aria-label',
-      'Václav Buchtelík main website'
-    );
-
-    /* ---------------------------------------------------------
-       HEADER
-       --------------------------------------------------------- */
-
-    const header =
-      createHeader();
-
-    /* ---------------------------------------------------------
-       LOGO
-       --------------------------------------------------------- */
-
-    const logo =
-      createLogo();
-
-    /* ---------------------------------------------------------
-       MENU
-       --------------------------------------------------------- */
-
-    const menu =
-      createMenu();
-
-    /* ---------------------------------------------------------
-       BUILD
-       --------------------------------------------------------- */
-
-    mainView.appendChild(
-      header
-    );
-
-    mainView.appendChild(
-      logo
-    );
-
-    mainView.appendChild(
-      menu
-    );
-
-    document.body.appendChild(
-      mainView
-    );
-
-    /* ---------------------------------------------------------
-       EVENTS
-       --------------------------------------------------------- */
+    mainView.append(createHeader(), createLogo(), createMenu());
+    document.body.appendChild(mainView);
 
     bindMenuEvents();
     bindSaberEvents();
     bindSaberLayoutSync();
-
     syncMenuIcon();
 
-    /* ---------------------------------------------------------
-       SHOW MAIN
-       --------------------------------------------------------- */
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!mainView) return;
 
-    window.requestAnimationFrame(
-      () => {
-        window.requestAnimationFrame(
-          () => {
-            if (!mainView) {
-              return;
-            }
-
-            mainView.classList.add(
-              'is-visible'
-            );
-
-            scheduleSaberSync();
-          }
-        );
-      }
-    );
-
-    /* ---------------------------------------------------------
-       START ARRIVAL
-       --------------------------------------------------------- */
+        mainView.classList.add('is-visible');
+        scheduleSaberSync();
+      });
+    });
 
     startMainArrival();
   };
 
   /* =========================================================
-     RESIZE
+     GLOBAL EVENTS
      ========================================================= */
 
   const handleResize = () => {
-    if (!mainView) {
-      return;
-    }
-
-    scheduleSaberSync();
+    if (mainView) scheduleSaberSync();
   };
 
-  window.addEventListener(
-    'resize',
-    handleResize,
-    {
-      passive: true
-    }
-  );
-
-  window.addEventListener(
-    'orientationchange',
-    handleResize,
-    {
-      passive: true
-    }
-  );
-
-  /* =========================================================
-     MAIN ENTER EVENT
-     ========================================================= */
-
-  window.addEventListener(
-    'vb:main-enter',
-    createMain
-  );
+  window.addEventListener('resize', handleResize, { passive: true });
+  window.addEventListener('orientationchange', handleResize, { passive: true });
+  window.addEventListener('vb:main-enter', createMain);
+  window.addEventListener('vb:gallery-closed', handleGalleryClosed);
 
   /* =========================================================
      CLEANUP
      ========================================================= */
 
-  window.addEventListener(
-    'pagehide',
-    () => {
-      if (
-        mainLogoTimer !== null
-      ) {
-        window.clearTimeout(
-          mainLogoTimer
-        );
-
-        mainLogoTimer = null;
-      }
-
-      if (
-        mainControlsTimer !== null
-      ) {
-        window.clearTimeout(
-          mainControlsTimer
-        );
-
-        mainControlsTimer = null;
-      }
-
-      if (
-        saberSyncFrame !== null
-      ) {
-        window.cancelAnimationFrame(
-          saberSyncFrame
-        );
-
-        saberSyncFrame = null;
-      }
-
-      if (menuResizeObserver) {
-        menuResizeObserver.disconnect();
-
-        menuResizeObserver = null;
-      }
-
-      draggingSaber = false;
-      menuOpen = false;
-    },
-    {
-      once: true
+  window.addEventListener('pagehide', () => {
+    if (mainLogoTimer !== null) {
+      clearTimeout(mainLogoTimer);
+      mainLogoTimer = null;
     }
-  );
+
+    if (mainControlsTimer !== null) {
+      clearTimeout(mainControlsTimer);
+      mainControlsTimer = null;
+    }
+
+    if (saberSyncFrame !== null) {
+      cancelAnimationFrame(saberSyncFrame);
+      saberSyncFrame = null;
+    }
+
+    menuResizeObserver?.disconnect();
+    menuResizeObserver = null;
+
+    window.removeEventListener('resize', handleResize);
+    window.removeEventListener('orientationchange', handleResize);
+    window.removeEventListener('vb:main-enter', createMain);
+    window.removeEventListener('vb:gallery-closed', handleGalleryClosed);
+
+    draggingSaber = false;
+    menuOpen = false;
+  }, { once: true });
 })();
