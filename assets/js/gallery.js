@@ -7,30 +7,10 @@
    ========================================================= */
 
 (() => {
-  /* =========================================================
-     STATE
-     ========================================================= */
-
-  const state = { index: 0, isOpen: false };
-  const refs = {
-    gallery: null,
-    viewport: null,
-    layerPrev: null,
-    layerCurrent: null,
-    layerNext: null
-  };
-
-  let art = [];
-  let swipe = null;
-  let previousBodyOverflow = '';
-  let previousHtmlOverflow = '';
-  let previousBodyTouchAction = '';
-
-  const preloaded = new Map();
-
-  /* =========================================================
-     HELPERS
-     ========================================================= */
+  let art = [], gallery = null, viewport = null, layerPrev = null, layerCurrent = null, layerNext = null;
+  let currentIndex = 0, isOpen = false, swipeEngine = null;
+  let previousBodyOverflow = '', previousHtmlOverflow = '', previousBodyTouchAction = '';
+  const preloadedImages = new Map();
 
   const el = (tag, className = '') => {
     const node = document.createElement(tag);
@@ -38,45 +18,21 @@
     return node;
   };
 
-  const normalizeIndex = index => {
-    if (!art.length) return 0;
-    return ((index % art.length) + art.length) % art.length;
-  };
-
-  const vh = () => Math.max(
-    1,
-    window.visualViewport?.height || 0,
-    window.innerHeight || 0,
-    document.documentElement.clientHeight || 0
-  );
-
-  /* =========================================================
-     IMAGE PRELOAD
-     ========================================================= */
+  const normalizeIndex = index => art.length ? ((index % art.length) + art.length) % art.length : 0;
 
   const preloadArtwork = artwork => {
-    if (!artwork?.src || preloaded.has(artwork.src)) return;
-
+    if (!artwork?.src || preloadedImages.has(artwork.src)) return;
     const image = new Image();
     image.decoding = 'async';
     image.src = artwork.src;
-
-    preloaded.set(artwork.src, image);
-
-    if (typeof image.decode === 'function') image.decode().catch(() => {});
+    preloadedImages.set(artwork.src, image);
+    image.decode?.().catch(() => {});
   };
 
   const preloadAround = index => {
     if (!art.length) return;
-
-    for (let offset = -3; offset <= 3; offset++) {
-      preloadArtwork(art[normalizeIndex(index + offset)]);
-    }
+    [-3, -2, -1, 0, 1, 2, 3].forEach(offset => preloadArtwork(art[normalizeIndex(index + offset)]));
   };
-
-  /* =========================================================
-     LAYERS
-     ========================================================= */
 
   const createLayer = position => {
     const layer = el('article', `gallery-viewer__layer gallery-viewer__layer--${position}`);
@@ -87,7 +43,6 @@
     const details = el('div', 'gallery-viewer__details');
 
     layer.dataset.position = position;
-
     image.alt = '';
     image.decoding = 'async';
     image.draggable = false;
@@ -96,45 +51,170 @@
     meta.append(title, details);
     layer.append(media, meta);
 
-    layer._image = image;
-    layer._title = title;
-    layer._details = details;
-
     return layer;
   };
 
-  const setLayerContent = (layer, artwork, index) => {
+  const setLayerArtwork = (layer, artwork, index) => {
     if (!layer || !artwork) return;
+
+    const image = layer.querySelector('.gallery-viewer__image');
+    const title = layer.querySelector('.gallery-viewer__title');
+    const details = layer.querySelector('.gallery-viewer__details');
 
     layer.dataset.index = String(index);
     layer.dataset.artId = String(artwork.id ?? '');
 
-    const absoluteSrc = new URL(artwork.src, window.location.href).href;
+    if (image) {
+      const absoluteSrc = new URL(artwork.src, window.location.href).href;
+      if (image.src !== absoluteSrc) image.src = artwork.src;
+      image.alt = artwork.title || '';
+    }
 
-    if (layer._image.src !== absoluteSrc) layer._image.src = artwork.src;
+    if (title) title.textContent = artwork.title || '';
 
-    layer._image.alt = artwork.title || '';
-    layer._title.textContent = artwork.title || '';
-    layer._details.textContent = artwork.details || '';
-    layer._details.hidden = !artwork.details;
+    if (details) {
+      details.textContent = artwork.details || '';
+      details.hidden = !artwork.details;
+    }
   };
 
-  const syncLayers = () => {
+  const syncContent = () => {
     if (!art.length) return;
 
-    const prevIndex = normalizeIndex(state.index - 1);
-    const nextIndex = normalizeIndex(state.index + 1);
+    const previousIndex = normalizeIndex(currentIndex - 1);
+    const nextIndex = normalizeIndex(currentIndex + 1);
 
-    setLayerContent(refs.layerPrev, art[prevIndex], prevIndex);
-    setLayerContent(refs.layerCurrent, art[state.index], state.index);
-    setLayerContent(refs.layerNext, art[nextIndex], nextIndex);
+    setLayerArtwork(layerPrev, art[previousIndex], previousIndex);
+    setLayerArtwork(layerCurrent, art[currentIndex], currentIndex);
+    setLayerArtwork(layerNext, art[nextIndex], nextIndex);
 
-    preloadAround(state.index);
+    preloadAround(currentIndex);
   };
 
-  /* =========================================================
-     BACK
-     ========================================================= */
+  const resetLayerGeometry = () => {
+    if (!layerPrev || !layerCurrent || !layerNext) return;
+
+    layerPrev.style.transition = 'none';
+    layerCurrent.style.transition = 'none';
+    layerNext.style.transition = 'none';
+
+    layerPrev.style.transform = 'translate3d(0,-100%,0)';
+    layerCurrent.style.transform = 'translate3d(0,0,0)';
+    layerNext.style.transform = 'translate3d(0,100%,0)';
+  };
+
+  const dispatchSlideChange = () => {
+    window.dispatchEvent(new CustomEvent('vb:gallery-slide-change', {
+      detail: { index: currentIndex, artwork: art[currentIndex] }
+    }));
+  };
+
+  const handleSwipeCommit = direction => {
+    if (!isOpen || !art.length) return;
+
+    if (direction > 0) {
+      const oldPrevious = layerPrev;
+      layerPrev = layerCurrent;
+      layerCurrent = layerNext;
+      layerNext = oldPrevious;
+      currentIndex = normalizeIndex(currentIndex + 1);
+    } else {
+      const oldNext = layerNext;
+      layerNext = layerCurrent;
+      layerCurrent = layerPrev;
+      layerPrev = oldNext;
+      currentIndex = normalizeIndex(currentIndex - 1);
+    }
+
+    syncContent();
+    resetLayerGeometry();
+
+    swipeEngine?.setLayers?.({
+      previous: layerPrev,
+      current: layerCurrent,
+      next: layerNext
+    });
+
+    swipeEngine?.reset?.();
+    dispatchSlideChange();
+  };
+
+  const initializeSwipeEngine = () => {
+    if (swipeEngine) return true;
+
+    if (!window.VBSwipe || typeof window.VBSwipe.create !== 'function') {
+      console.warn('[VB Gallery] VBSwipe unavailable — gallery remains functional without swipe.');
+      return false;
+    }
+
+    try {
+      swipeEngine = window.VBSwipe.create({
+        viewport,
+        layers: { previous: layerPrev, current: layerCurrent, next: layerNext },
+        exclude: '.gallery-viewer__back',
+        onCommit: handleSwipeCommit
+      });
+
+      return !!swipeEngine;
+    } catch (error) {
+      console.error('[VB Gallery] Swipe initialization failed:', error);
+      swipeEngine = null;
+      return false;
+    }
+  };
+
+  const activateSwipeEngine = () => {
+    if (!initializeSwipeEngine()) return;
+
+    try {
+      swipeEngine.setLayers?.({
+        previous: layerPrev,
+        current: layerCurrent,
+        next: layerNext
+      });
+
+      swipeEngine.enable?.();
+      swipeEngine.reset?.();
+      swipeEngine.resize?.();
+    } catch (error) {
+      console.error('[VB Gallery] Swipe activation failed:', error);
+    }
+  };
+
+  const deactivateSwipeEngine = () => {
+    if (!swipeEngine) return;
+    try {
+      swipeEngine.disable?.();
+      swipeEngine.reset?.();
+    } catch (error) {
+      console.error('[VB Gallery] Swipe deactivation failed:', error);
+    }
+  };
+
+  function closeGallery() {
+    if (!gallery || !isOpen) return;
+
+    isOpen = false;
+    deactivateSwipeEngine();
+
+    gallery.classList.remove('is-visible');
+    window.removeEventListener('keydown', handleKeyDown);
+
+    document.body.style.overflow = previousBodyOverflow;
+    document.documentElement.style.overflow = previousHtmlOverflow;
+    document.body.style.touchAction = previousBodyTouchAction;
+
+    window.setTimeout(() => {
+      if (!gallery || isOpen) return;
+      gallery.classList.remove('is-open');
+      gallery.setAttribute('aria-hidden', 'true');
+      resetLayerGeometry();
+    }, 220);
+
+    window.dispatchEvent(new CustomEvent('vb:gallery-closed', {
+      detail: { index: currentIndex, artwork: art[currentIndex] }
+    }));
+  }
 
   const createBackButton = () => {
     const button = el('button', 'gallery-viewer__back');
@@ -159,69 +239,57 @@
     return button;
   };
 
-  /* =========================================================
-     VIEWER
-     ========================================================= */
-
   const buildGallery = () => {
-    if (refs.gallery) return;
+    if (gallery) return;
 
-    refs.gallery = el('section', 'gallery-viewer');
-    refs.viewport = el('div', 'gallery-viewer__viewport');
+    gallery = el('section', 'gallery-viewer');
+    gallery.id = 'galleryViewer';
+    gallery.setAttribute('aria-label', 'Artwork gallery');
+    gallery.setAttribute('aria-hidden', 'true');
 
-    refs.gallery.id = 'galleryViewer';
-    refs.gallery.setAttribute('aria-label', 'Artwork gallery');
-    refs.gallery.setAttribute('aria-hidden', 'true');
+    viewport = el('div', 'gallery-viewer__viewport');
+    layerPrev = createLayer('previous');
+    layerCurrent = createLayer('current');
+    layerNext = createLayer('next');
 
-    refs.layerPrev = createLayer('previous');
-    refs.layerCurrent = createLayer('current');
-    refs.layerNext = createLayer('next');
+    viewport.append(layerPrev, layerCurrent, layerNext);
+    gallery.append(viewport, createBackButton());
+    document.body.appendChild(gallery);
 
-    refs.viewport.append(refs.layerPrev, refs.layerCurrent, refs.layerNext);
-    refs.gallery.append(refs.viewport, createBackButton());
-    document.body.appendChild(refs.gallery);
-
-    initializeSwipe();
+    resetLayerGeometry();
   };
 
-  /* =========================================================
-     SWIPE ENGINE
-     ========================================================= */
+  const fallbackCommit = direction => {
+    if (!isOpen || !art.length) return;
 
-  const initializeSwipe = () => {
-    if (swipe || typeof window.initVBSwipe !== 'function') {
-      if (!swipe && typeof window.initVBSwipe !== 'function') {
-        console.error('[VB Gallery] swipe.js is not loaded.');
-      }
+    currentIndex = normalizeIndex(currentIndex + direction);
+    syncContent();
+    resetLayerGeometry();
+    dispatchSlideChange();
+  };
+
+  const handleKeyDown = event => {
+    if (!isOpen) return;
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeGallery();
       return;
     }
 
-    swipe = window.initVBSwipe({
-      refs,
-      state,
-      getItems: () => art,
-      normalizeIndex,
-      vh,
-      setLayerContent,
-      preloadAround,
+    if (event.key === 'ArrowDown' || event.key === 'PageDown') {
+      event.preventDefault();
+      if (swipeEngine?.commit) swipeEngine.commit(1);
+      else fallbackCommit(1);
+      return;
+    }
 
-      onCommit(index) {
-        state.index = normalizeIndex(index);
-        preloadAround(state.index);
-
-        window.dispatchEvent(new CustomEvent('vb:gallery-slide-change', {
-          detail: {
-            index: state.index,
-            artwork: art[state.index]
-          }
-        }));
-      }
-    });
+    if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+      event.preventDefault();
+      if (swipeEngine?.commit) swipeEngine.commit(-1);
+      else fallbackCommit(-1);
+    }
   };
-
-  /* =========================================================
-     OPEN / CLOSE
-     ========================================================= */
 
   const openGallery = (requestedIndex = 0) => {
     art = Array.isArray(window.ART) ? window.ART : [];
@@ -232,16 +300,13 @@
     }
 
     buildGallery();
-    initializeSwipe();
-
-    if (!swipe) return;
+    if (!gallery) return;
 
     const parsedIndex = Number(requestedIndex);
-    state.index = Number.isInteger(parsedIndex) ? normalizeIndex(parsedIndex) : 0;
-    state.isOpen = true;
+    currentIndex = Number.isInteger(parsedIndex) ? normalizeIndex(parsedIndex) : 0;
 
-    syncLayers();
-    swipe.reset?.();
+    syncContent();
+    resetLayerGeometry();
 
     previousBodyOverflow = document.body.style.overflow;
     previousHtmlOverflow = document.documentElement.style.overflow;
@@ -251,79 +316,85 @@
     document.documentElement.style.overflow = 'hidden';
     document.body.style.touchAction = 'none';
 
-    refs.gallery.setAttribute('aria-hidden', 'false');
-    refs.gallery.classList.add('is-open');
+    gallery.setAttribute('aria-hidden', 'false');
+    gallery.classList.add('is-open');
+
+    /*
+     * CRITICAL:
+     * Gallery is now open BEFORE swipe initialization and it remains open
+     * even if the external swipe engine is unavailable or throws.
+     */
+    isOpen = true;
+
+    activateSwipeEngine();
+
+    window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
 
     requestAnimationFrame(() => {
-      if (state.isOpen) refs.gallery.classList.add('is-visible');
+      if (!gallery || !isOpen) return;
+      gallery.classList.add('is-visible');
+      resetLayerGeometry();
+      swipeEngine?.resize?.();
     });
 
     window.dispatchEvent(new CustomEvent('vb:gallery-opened', {
-      detail: {
-        index: state.index,
-        artwork: art[state.index]
-      }
+      detail: { index: currentIndex, artwork: art[currentIndex] }
     }));
   };
 
-  function closeGallery() {
-    if (!refs.gallery || !state.isOpen) return;
-
-    state.isOpen = false;
-    swipe?.cancel?.();
-
-    refs.gallery.classList.remove('is-visible');
-    document.body.style.overflow = previousBodyOverflow;
-    document.documentElement.style.overflow = previousHtmlOverflow;
-    document.body.style.touchAction = previousBodyTouchAction;
-
-    window.setTimeout(() => {
-      if (state.isOpen) return;
-
-      refs.gallery.classList.remove('is-open');
-      refs.gallery.setAttribute('aria-hidden', 'true');
-      swipe?.reset?.();
-    }, 220);
-
-    window.dispatchEvent(new CustomEvent('vb:gallery-closed'));
-  }
-
-  /* =========================================================
-     EVENTS
-     ========================================================= */
-
-  const handleOpen = event => {
-    const index = Number(event.detail?.index);
-    openGallery(Number.isInteger(index) ? index : 0);
-  };
-
-  const handleKeyDown = event => {
-    if (!state.isOpen) return;
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeGallery();
-    }
+  const handleGalleryOpenRequest = event => {
+    const requestedIndex = Number(event.detail?.index);
+    openGallery(Number.isInteger(requestedIndex) ? requestedIndex : 0);
   };
 
   const handleResize = () => {
-    if (state.isOpen) swipe?.resize?.();
+    if (!gallery || !isOpen) return;
+    resetLayerGeometry();
+    swipeEngine?.resize?.();
   };
 
-  window.addEventListener('vb:gallery-open-view', handleOpen);
-  window.addEventListener('keydown', handleKeyDown);
+  const recoverVisibleState = () => {
+    if (!isOpen) return;
+
+    syncContent();
+    resetLayerGeometry();
+
+    swipeEngine?.setLayers?.({
+      previous: layerPrev,
+      current: layerCurrent,
+      next: layerNext
+    });
+
+    swipeEngine?.reset?.();
+    swipeEngine?.resize?.();
+  };
+
+  window.addEventListener('vb:gallery-open-view', handleGalleryOpenRequest);
   window.addEventListener('resize', handleResize, { passive: true });
   window.addEventListener('orientationchange', handleResize, { passive: true });
   window.visualViewport?.addEventListener('resize', handleResize, { passive: true });
 
-  /* =========================================================
-     PUBLIC API
-     ========================================================= */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') recoverVisibleState();
+  }, { passive: true });
 
-  window.VBGallery = {
-    open: openGallery,
-    close: closeGallery,
-    getIndex: () => state.index,
-    isOpen: () => state.isOpen
-  };
+  window.addEventListener('pageshow', recoverVisibleState, { passive: true });
+
+  window.addEventListener('pagehide', () => {
+    window.removeEventListener('vb:gallery-open-view', handleGalleryOpenRequest);
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('resize', handleResize);
+    window.removeEventListener('orientationchange', handleResize);
+    window.visualViewport?.removeEventListener('resize', handleResize);
+
+    try {
+      swipeEngine?.destroy?.();
+    } catch (error) {
+      console.error('[VB Gallery] Swipe cleanup failed:', error);
+    }
+
+    swipeEngine = null;
+    isOpen = false;
+  }, { once: true });
 })();
