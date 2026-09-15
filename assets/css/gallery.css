@@ -4,12 +4,12 @@
    ========================================================= */
 
 :root {
-  --gallery-background: #000000;
-  --gallery-foreground: #ffffff;
-  --gallery-secondary: rgba(255, 255, 255, 0.68);
-  --gallery-side: clamp(18px, 5vw, 32px);
-  --gallery-top: max(18px, env(safe-area-inset-top, 0px));
-  --gallery-bottom: max(22px, env(safe-area-inset-bottom, 0px));
+  --gallery-background: #000;
+  --gallery-foreground: #fff;
+  --gallery-secondary: rgba(255,255,255,.68);
+  --gallery-side: clamp(18px,5vw,32px);
+  --gallery-top: max(18px,env(safe-area-inset-top,0px));
+  --gallery-bottom: max(22px,env(safe-area-inset-bottom,0px));
 }
 
 /* =========================================================
@@ -27,11 +27,8 @@
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
-  background: rgba(0, 0, 0, 0);
-  transition:
-    opacity 220ms ease,
-    background-color 220ms ease,
-    visibility 0s linear 220ms;
+  background: transparent;
+  transition: opacity 220ms ease,background-color 220ms ease,visibility 0s linear 220ms;
   contain: layout paint;
   isolation: isolate;
   overscroll-behavior: none;
@@ -41,15 +38,12 @@
 .gallery-viewer.is-open {
   visibility: visible;
   pointer-events: auto;
-  transition:
-    opacity 220ms ease,
-    background-color 220ms ease,
-    visibility 0s linear 0s;
+  transition: opacity 220ms ease,background-color 220ms ease,visibility 0s linear 0s;
 }
 
 .gallery-viewer.is-visible {
   opacity: 1;
-  background: rgba(0, 0, 0, 0.96);
+  background: rgba(0,0,0,.96);
 }
 
 /* =========================================================
@@ -70,13 +64,10 @@
   cursor: grab;
 }
 
-.gallery-viewer__viewport:active {
-  cursor: grabbing;
-}
+.gallery-viewer__viewport:active { cursor: grabbing; }
 
 /* =========================================================
-   VIRTUALIZED LAYERS
-   PREVIOUS + CURRENT + NEXT
+   VIRTUALIZED LAYERS — PREVIOUS + CURRENT + NEXT
    ========================================================= */
 
 .gallery-viewer__layer {
@@ -86,33 +77,22 @@
   width: 100%;
   height: 100%;
   margin: 0;
-  padding:
-    calc(var(--gallery-top) + 46px)
-    var(--gallery-side)
-    var(--gallery-bottom);
+  padding: calc(var(--gallery-top) + 46px) var(--gallery-side) var(--gallery-bottom);
   display: flex;
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
   overflow: hidden;
-  background: #000000;
-  transform: translate3d(0, 0, 0);
+  background: var(--gallery-background);
+  transform: translate3d(0,0,0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   contain: layout paint;
 }
 
-.gallery-viewer__layer--previous {
-  transform: translate3d(0, -100%, 0);
-}
-
-.gallery-viewer__layer--current {
-  transform: translate3d(0, 0, 0);
-}
-
-.gallery-viewer__layer--next {
-  transform: translate3d(0, 100%, 0);
-}
+.gallery-viewer__layer--previous { transform: translate3d(0,-100%,0); }
+.gallery-viewer__layer--current { transform: translate3d(0,0,0); }
+.gallery-viewer__layer--next { transform: translate3d(0,100%,0); }
 
 /* =========================================================
    MEDIA
@@ -164,35 +144,32 @@
   pointer-events: none;
 }
 
-.gallery-viewer__title {
+.gallery-viewer__title,
+.gallery-viewer__details {
   width: 100%;
   margin: 0;
   padding: 0;
+  font-family: "Chakra Petch",Arial,sans-serif;
+  letter-spacing: .01em;
+  overflow-wrap: break-word;
+}
+
+.gallery-viewer__title {
   color: var(--gallery-foreground);
-  font-family: "Chakra Petch", Arial, sans-serif;
-  font-size: clamp(15px, 4vw, 18px);
+  font-size: clamp(15px,4vw,18px);
   font-weight: 500;
   line-height: 1.25;
-  letter-spacing: 0.01em;
-  overflow-wrap: break-word;
 }
 
 .gallery-viewer__details {
-  width: 100%;
-  margin: 5px 0 0;
-  padding: 0;
+  margin-top: 5px;
   color: var(--gallery-secondary);
-  font-family: "Chakra Petch", Arial, sans-serif;
-  font-size: clamp(12px, 3.2vw, 14px);
+  font-size: clamp(12px,3.2vw,14px);
   font-weight: 300;
   line-height: 1.35;
-  letter-spacing: 0.01em;
-  overflow-wrap: break-word;
 }
 
-.gallery-viewer__details[hidden] {
-  display: none;
-}
+.gallery-viewer__details[hidden] { display: none; }
 
 /* =========================================================
    CLOSE
@@ -216,29 +193,23 @@
   align-items: center;
   justify-content: center;
   background: transparent;
-  color: #ffffff;
+  color: #fff;
   cursor: pointer;
   opacity: 0;
-  transform: translate3d(0, -8px, 0);
-  transition:
-    opacity 220ms ease,
-    transform 280ms cubic-bezier(0.15, 0.85, 0.2, 1);
+  transform: translate3d(0,-8px,0);
+  transition: opacity 220ms ease,transform 280ms cubic-bezier(.15,.85,.2,1);
   -webkit-tap-highlight-color: transparent;
 }
 
 .gallery-viewer.is-visible .gallery-viewer__close {
-  opacity: 0.78;
-  transform: translate3d(0, 0, 0);
+  opacity: .78;
+  transform: translate3d(0,0,0);
 }
 
 .gallery-viewer__close:hover,
-.gallery-viewer__close:focus-visible {
-  opacity: 1;
-}
+.gallery-viewer__close:focus-visible { opacity: 1; }
 
-.gallery-viewer__close:active {
-  opacity: 0.5;
-}
+.gallery-viewer__close:active { opacity: .5; }
 
 .gallery-viewer__close-line {
   position: absolute;
@@ -250,98 +221,54 @@
   transform-origin: center;
 }
 
-.gallery-viewer__close-line--a {
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.gallery-viewer__close-line--b {
-  transform: translate(-50%, -50%) rotate(-45deg);
-}
+.gallery-viewer__close-line--a { transform: translate(-50%,-50%) rotate(45deg); }
+.gallery-viewer__close-line--b { transform: translate(-50%,-50%) rotate(-45deg); }
 
 /* =========================================================
-   TABLET
+   RESPONSIVE
    ========================================================= */
 
-@media (min-width: 768px) {
-  :root {
-    --gallery-side: clamp(28px, 6vw, 64px);
-  }
+@media (min-width:768px) {
+  :root { --gallery-side: clamp(28px,6vw,64px); }
 
-  .gallery-viewer__layer {
-    padding-top: calc(var(--gallery-top) + 52px);
-  }
-
-  .gallery-viewer__meta {
-    width: min(100%, 1100px);
-    margin-inline: auto;
-    padding-top: 18px;
-  }
-
-  .gallery-viewer__media {
-    width: min(100%, 1100px);
-    margin-inline: auto;
-  }
-
-  .gallery-viewer__close {
-    width: 48px;
-    height: 48px;
-  }
-
-  .gallery-viewer__close-line {
-    width: 25px;
-  }
-}
-
-/* =========================================================
-   DESKTOP
-   ========================================================= */
-
-@media (min-width: 1200px) {
-  :root {
-    --gallery-side: clamp(40px, 6vw, 96px);
-  }
-
-  .gallery-viewer__layer {
-    padding-top: calc(var(--gallery-top) + 58px);
-    padding-bottom: max(30px, env(safe-area-inset-bottom, 0px));
-  }
+  .gallery-viewer__layer { padding-top: calc(var(--gallery-top) + 52px); }
 
   .gallery-viewer__media,
   .gallery-viewer__meta {
-    width: min(100%, 1280px);
+    width: min(100%,1100px);
+    margin-inline: auto;
   }
 
-  .gallery-viewer__meta {
-    padding-top: 20px;
-  }
+  .gallery-viewer__meta { padding-top: 18px; }
+  .gallery-viewer__close { width: 48px; height: 48px; }
+  .gallery-viewer__close-line { width: 25px; }
 }
 
-/* =========================================================
-   SHORT VIEWPORTS
-   ========================================================= */
+@media (min-width:1200px) {
+  :root { --gallery-side: clamp(40px,6vw,96px); }
 
-@media (max-height: 650px) {
+  .gallery-viewer__layer {
+    padding-top: calc(var(--gallery-top) + 58px);
+    padding-bottom: max(30px,env(safe-area-inset-bottom,0px));
+  }
+
+  .gallery-viewer__media,
+  .gallery-viewer__meta { width: min(100%,1280px); }
+
+  .gallery-viewer__meta { padding-top: 20px; }
+}
+
+@media (max-height:650px) {
   .gallery-viewer__layer {
     padding-top: calc(var(--gallery-top) + 38px);
-    padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+    padding-bottom: max(14px,env(safe-area-inset-bottom,0px));
   }
 
-  .gallery-viewer__meta {
-    padding-top: 9px;
-  }
-
-  .gallery-viewer__details {
-    margin-top: 3px;
-  }
+  .gallery-viewer__meta { padding-top: 9px; }
+  .gallery-viewer__details { margin-top: 3px; }
 }
 
-/* =========================================================
-   REDUCED MOTION
-   ========================================================= */
-
-@media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion:reduce) {
   .gallery-viewer,
-  .gallery-viewer__close {
-    transition-duration: 1ms;
-  }
+  .gallery-viewer__close { transition-duration: 1ms; }
 }
