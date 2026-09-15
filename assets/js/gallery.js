@@ -2,101 +2,40 @@
 
 /* =========================================================
    VÁCLAV BUCHTELÍK — GALLERY
-   CINEMATIC FULLSCREEN ARTWORK SWIPE
+   FULLSCREEN ARTWORK VIEWER
    PREVIOUS + CURRENT + NEXT
-   CONTINUOUS HIGH-FREQUENCY RAF ENGINE
    ========================================================= */
 
 (() => {
   /* =========================================================
-     MOTION
-     ========================================================= */
-
-  const AXIS_LOCK_PX = 3;
-  const COMMIT_DISTANCE_RATIO = 0.10;
-  const COMMIT_MIN_DISTANCE_PX = 28;
-  const FLICK_MIN_DISTANCE_PX = 10;
-  const FLICK_VELOCITY_PX_MS = 0.20;
-
-  const VELOCITY_SMOOTHING = 0.42;
-  const COMMIT_BASE_SPEED_PX_MS = 2.10;
-  const COMMIT_MIN_SPEED_PX_MS = 1.65;
-  const COMMIT_MAX_SPEED_PX_MS = 5.20;
-  const COMMIT_MIN_DURATION_MS = 150;
-  const COMMIT_MAX_DURATION_MS = 380;
-
-  const SNAP_MIN_DURATION_MS = 150;
-  const SNAP_MAX_DURATION_MS = 280;
-
-  const QUEUE_AXIS_LOCK_PX = 3;
-  const QUEUE_FLICK_MIN_DISTANCE_PX = 9;
-  const QUEUE_COMMIT_MIN_DISTANCE_PX = 22;
-  const MAX_QUEUED_SWIPES = 12;
-
-  /* =========================================================
      STATE
      ========================================================= */
 
+  const state = { index: 0, isOpen: false };
+  const refs = {
+    gallery: null,
+    viewport: null,
+    layerPrev: null,
+    layerCurrent: null,
+    layerNext: null
+  };
+
   let art = [];
-
-  let gallery = null;
-  let viewport = null;
-  let backButton = null;
-
-  let layerPrev = null;
-  let layerCurrent = null;
-  let layerNext = null;
-
-  let currentIndex = 0;
-
-  let isOpen = false;
-  let isAnimating = false;
-  let dragging = false;
-  let axisLocked = false;
-  let verticalGesture = false;
-
-  let pointerId = null;
-
-  let startX = 0;
-  let startY = 0;
-
-  let lastY = 0;
-  let lastTime = 0;
-  let velocityY = 0;
-
-  let dragY = 0;
-  let viewportHeight = 1;
-
-  let raf = 0;
-  let motionToken = 0;
-
-  let queueTracking = false;
-  let queueAxisLocked = false;
-  let queueVerticalGesture = false;
-
-  let queueStartX = 0;
-  let queueStartY = 0;
-  let queueLastY = 0;
-  let queueLastTime = 0;
-  let queueVelocityY = 0;
-  let queueDragY = 0;
-
-  const swipeQueue = [];
-
+  let swipe = null;
   let previousBodyOverflow = '';
   let previousHtmlOverflow = '';
   let previousBodyTouchAction = '';
 
-  const preloadedImages = new Map();
+  const preloaded = new Map();
 
   /* =========================================================
      HELPERS
      ========================================================= */
 
-  const createElement = (tag, className = '') => {
-    const element = document.createElement(tag);
-    if (className) element.className = className;
-    return element;
+  const el = (tag, className = '') => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    return node;
   };
 
   const normalizeIndex = index => {
@@ -104,129 +43,48 @@
     return ((index % art.length) + art.length) % art.length;
   };
 
-  const clamp = (value, min, max) =>
-    Math.max(min, Math.min(max, value));
-
-  const getViewportHeight = () => Math.max(
+  const vh = () => Math.max(
     1,
     window.visualViewport?.height || 0,
     window.innerHeight || 0,
     document.documentElement.clientHeight || 0
   );
 
-  const setTransform = (layer, y) => {
-    if (!layer) return;
-    layer.style.transform =
-      `translate3d(0,${y.toFixed(3)}px,0)`;
-  };
-
-  const disableTransitions = () => {
-    [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      if (!layer) return;
-      layer.style.transition = 'none';
-    });
-  };
-
-  const setWillChange = value => {
-    [layerPrev, layerCurrent, layerNext].forEach(layer => {
-      if (layer) layer.style.willChange = value;
-    });
-  };
-
-  const clearMotion = () => {
-    motionToken++;
-
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
-    }
-  };
-
-  /* =========================================================
-     EASING
-     ========================================================= */
-
-  const easeOutQuint = t =>
-    1 - Math.pow(1 - t, 5);
-
-  const easeOutCubic = t =>
-    1 - Math.pow(1 - t, 3);
-
   /* =========================================================
      IMAGE PRELOAD
      ========================================================= */
 
   const preloadArtwork = artwork => {
-    if (
-      !artwork?.src ||
-      preloadedImages.has(artwork.src)
-    ) {
-      return;
-    }
+    if (!artwork?.src || preloaded.has(artwork.src)) return;
 
     const image = new Image();
-
     image.decoding = 'async';
     image.src = artwork.src;
 
-    preloadedImages.set(
-      artwork.src,
-      image
-    );
+    preloaded.set(artwork.src, image);
 
-    if (typeof image.decode === 'function') {
-      image.decode().catch(() => {});
-    }
+    if (typeof image.decode === 'function') image.decode().catch(() => {});
   };
 
   const preloadAround = index => {
     if (!art.length) return;
 
-    [
-      normalizeIndex(index - 3),
-      normalizeIndex(index - 2),
-      normalizeIndex(index - 1),
-      normalizeIndex(index),
-      normalizeIndex(index + 1),
-      normalizeIndex(index + 2),
-      normalizeIndex(index + 3)
-    ].forEach(i => preloadArtwork(art[i]));
+    for (let offset = -3; offset <= 3; offset++) {
+      preloadArtwork(art[normalizeIndex(index + offset)]);
+    }
   };
 
   /* =========================================================
-     LAYER
+     LAYERS
      ========================================================= */
 
   const createLayer = position => {
-    const layer = createElement(
-      'article',
-      `gallery-viewer__layer gallery-viewer__layer--${position}`
-    );
-
-    const media = createElement(
-      'div',
-      'gallery-viewer__media'
-    );
-
-    const image = createElement(
-      'img',
-      'gallery-viewer__image'
-    );
-
-    const meta = createElement(
-      'div',
-      'gallery-viewer__meta'
-    );
-
-    const title = createElement(
-      'div',
-      'gallery-viewer__title'
-    );
-
-    const details = createElement(
-      'div',
-      'gallery-viewer__details'
-    );
+    const layer = el('article', `gallery-viewer__layer gallery-viewer__layer--${position}`);
+    const media = el('div', 'gallery-viewer__media');
+    const image = el('img', 'gallery-viewer__image');
+    const meta = el('div', 'gallery-viewer__meta');
+    const title = el('div', 'gallery-viewer__title');
+    const details = el('div', 'gallery-viewer__details');
 
     layer.dataset.position = position;
 
@@ -238,1650 +96,234 @@
     meta.append(title, details);
     layer.append(media, meta);
 
+    layer._image = image;
+    layer._title = title;
+    layer._details = details;
+
     return layer;
   };
 
-  const setLayerArtwork = (
-    layer,
-    artwork,
-    index
-  ) => {
+  const setLayerContent = (layer, artwork, index) => {
     if (!layer || !artwork) return;
 
-    const image = layer.querySelector(
-      '.gallery-viewer__image'
-    );
-
-    const title = layer.querySelector(
-      '.gallery-viewer__title'
-    );
-
-    const details = layer.querySelector(
-      '.gallery-viewer__details'
-    );
-
     layer.dataset.index = String(index);
-    layer.dataset.artId =
-      String(artwork.id ?? '');
+    layer.dataset.artId = String(artwork.id ?? '');
 
-    if (image) {
-      const absoluteSrc = new URL(
-        artwork.src,
-        window.location.href
-      ).href;
+    const absoluteSrc = new URL(artwork.src, window.location.href).href;
 
-      if (image.src !== absoluteSrc) {
-        image.src = artwork.src;
-      }
+    if (layer._image.src !== absoluteSrc) layer._image.src = artwork.src;
 
-      image.alt = artwork.title || '';
-    }
-
-    if (title) {
-      title.textContent =
-        artwork.title || '';
-    }
-
-    if (details) {
-      details.textContent =
-        artwork.details || '';
-
-      details.hidden =
-        !artwork.details;
-    }
+    layer._image.alt = artwork.title || '';
+    layer._title.textContent = artwork.title || '';
+    layer._details.textContent = artwork.details || '';
+    layer._details.hidden = !artwork.details;
   };
 
-  /* =========================================================
-     CONTENT
-     ========================================================= */
-
-  const syncContent = () => {
+  const syncLayers = () => {
     if (!art.length) return;
 
-    const previousIndex =
-      normalizeIndex(currentIndex - 1);
+    const prevIndex = normalizeIndex(state.index - 1);
+    const nextIndex = normalizeIndex(state.index + 1);
 
-    const nextIndex =
-      normalizeIndex(currentIndex + 1);
+    setLayerContent(refs.layerPrev, art[prevIndex], prevIndex);
+    setLayerContent(refs.layerCurrent, art[state.index], state.index);
+    setLayerContent(refs.layerNext, art[nextIndex], nextIndex);
 
-    setLayerArtwork(
-      layerPrev,
-      art[previousIndex],
-      previousIndex
-    );
-
-    setLayerArtwork(
-      layerCurrent,
-      art[currentIndex],
-      currentIndex
-    );
-
-    setLayerArtwork(
-      layerNext,
-      art[nextIndex],
-      nextIndex
-    );
-
-    preloadAround(currentIndex);
+    preloadAround(state.index);
   };
 
   /* =========================================================
-     GEOMETRY
-     ========================================================= */
-
-  const renderTrack = offset => {
-    const height =
-      viewportHeight ||
-      getViewportHeight();
-
-    setTransform(
-      layerPrev,
-      -height + offset
-    );
-
-    setTransform(
-      layerCurrent,
-      offset
-    );
-
-    setTransform(
-      layerNext,
-      height + offset
-    );
-  };
-
-  const resetLayerGeometry = () => {
-    if (
-      !layerPrev ||
-      !layerCurrent ||
-      !layerNext
-    ) {
-      return;
-    }
-
-    viewportHeight =
-      getViewportHeight();
-
-    disableTransitions();
-    setWillChange('auto');
-
-    renderTrack(0);
-  };
-
-  const prepareMotionGeometry = () => {
-    viewportHeight =
-      getViewportHeight();
-
-    disableTransitions();
-    setWillChange('transform');
-  };
-
-  /* =========================================================
-     DRAG RENDER
-     ========================================================= */
-
-  const renderDrag = () => {
-    raf = 0;
-
-    if (
-      !dragging ||
-      !verticalGesture ||
-      isAnimating
-    ) {
-      return;
-    }
-
-    const height =
-      viewportHeight ||
-      getViewportHeight();
-
-    renderTrack(
-      clamp(
-        dragY,
-        -height,
-        height
-      )
-    );
-  };
-
-  const requestDragRender = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(
-        renderDrag
-      );
-    }
-  };
-
-  /* =========================================================
-     QUEUE
-     ========================================================= */
-
-  const resetQueueGesture = () => {
-    queueTracking = false;
-    queueAxisLocked = false;
-    queueVerticalGesture = false;
-
-    queueStartX = 0;
-    queueStartY = 0;
-    queueLastY = 0;
-    queueLastTime = 0;
-    queueVelocityY = 0;
-    queueDragY = 0;
-  };
-
-  const clearSwipeQueue = () => {
-    swipeQueue.length = 0;
-    resetQueueGesture();
-  };
-
-  const enqueueSwipe = direction => {
-    if (
-      direction !== 1 &&
-      direction !== -1
-    ) {
-      return;
-    }
-
-    if (
-      swipeQueue.length >=
-      MAX_QUEUED_SWIPES
-    ) {
-      swipeQueue.shift();
-    }
-
-    swipeQueue.push(direction);
-
-    const projectedIndex =
-      normalizeIndex(
-        currentIndex +
-        swipeQueue.reduce(
-          (sum, dir) => sum + dir,
-          0
-        )
-      );
-
-    preloadAround(projectedIndex);
-  };
-
-  const beginQueuedGesture = (x, y) => {
-    queueTracking = true;
-    queueAxisLocked = false;
-    queueVerticalGesture = false;
-
-    queueStartX = x;
-    queueStartY = y;
-
-    queueLastY = y;
-    queueLastTime =
-      performance.now();
-
-    queueVelocityY = 0;
-    queueDragY = 0;
-  };
-
-  const updateQueuedGesture = (x, y) => {
-    if (!queueTracking) return false;
-
-    const rawX =
-      x - queueStartX;
-
-    const rawY =
-      y - queueStartY;
-
-    if (!queueAxisLocked) {
-      if (
-        Math.abs(rawX) <
-          QUEUE_AXIS_LOCK_PX &&
-        Math.abs(rawY) <
-          QUEUE_AXIS_LOCK_PX
-      ) {
-        return false;
-      }
-
-      queueAxisLocked = true;
-
-      queueVerticalGesture =
-        Math.abs(rawY) >
-        Math.abs(rawX);
-
-      if (!queueVerticalGesture) {
-        resetQueueGesture();
-        return false;
-      }
-    }
-
-    if (!queueVerticalGesture) {
-      return false;
-    }
-
-    const now =
-      performance.now();
-
-    const dt =
-      Math.max(
-        1,
-        now - queueLastTime
-      );
-
-    const instantVelocity =
-      (y - queueLastY) / dt;
-
-    queueVelocityY =
-      queueVelocityY *
-        (1 - VELOCITY_SMOOTHING) +
-      instantVelocity *
-        VELOCITY_SMOOTHING;
-
-    queueLastY = y;
-    queueLastTime = now;
-    queueDragY = rawY;
-
-    return true;
-  };
-
-  const endQueuedGesture = cancelled => {
-    if (!queueTracking) return;
-
-    const distance =
-      Math.abs(queueDragY);
-
-    const velocity =
-      Math.abs(queueVelocityY);
-
-    const direction =
-      queueDragY < 0 ? 1 : -1;
-
-    const distanceCommit =
-      distance >=
-      QUEUE_COMMIT_MIN_DISTANCE_PX;
-
-    const flickCommit =
-      distance >=
-        QUEUE_FLICK_MIN_DISTANCE_PX &&
-      velocity >=
-        FLICK_VELOCITY_PX_MS &&
-      Math.sign(queueVelocityY) ===
-        Math.sign(queueDragY);
-
-    if (
-      !cancelled &&
-      queueVerticalGesture &&
-      queueDragY !== 0 &&
-      (
-        distanceCommit ||
-        flickCommit
-      )
-    ) {
-      enqueueSwipe(direction);
-    }
-
-    resetQueueGesture();
-  };
-
-  /* =========================================================
-     RAF ANIMATION
-     ========================================================= */
-
-  const animateTrack = ({
-    from,
-    to,
-    duration,
-    easing,
-    onComplete
-  }) => {
-    clearMotion();
-
-    const token = motionToken;
-    const startedAt =
-      performance.now();
-
-    const distance =
-      to - from;
-
-    disableTransitions();
-    setWillChange('transform');
-
-    const frame = now => {
-      if (
-        token !== motionToken ||
-        !isOpen ||
-        !isAnimating
-      ) {
-        raf = 0;
-        return;
-      }
-
-      const elapsed =
-        now - startedAt;
-
-      const progress =
-        clamp(
-          elapsed / duration,
-          0,
-          1
-        );
-
-      const eased =
-        easing(progress);
-
-      const position =
-        from +
-        distance * eased;
-
-      dragY = position;
-      renderTrack(position);
-
-      if (progress < 1) {
-        raf =
-          requestAnimationFrame(
-            frame
-          );
-
-        return;
-      }
-
-      raf = 0;
-      dragY = to;
-      renderTrack(to);
-
-      onComplete?.();
-    };
-
-    raf =
-      requestAnimationFrame(frame);
-  };
-
-  /* =========================================================
-     RECYCLE
-     ========================================================= */
-
-  const recycleForward = () => {
-    const oldPrevious =
-      layerPrev;
-
-    layerPrev =
-      layerCurrent;
-
-    layerCurrent =
-      layerNext;
-
-    layerNext =
-      oldPrevious;
-
-    currentIndex =
-      normalizeIndex(
-        currentIndex + 1
-      );
-  };
-
-  const recycleBackward = () => {
-    const oldNext =
-      layerNext;
-
-    layerNext =
-      layerCurrent;
-
-    layerCurrent =
-      layerPrev;
-
-    layerPrev =
-      oldNext;
-
-    currentIndex =
-      normalizeIndex(
-        currentIndex - 1
-      );
-  };
-
-  /* =========================================================
-     QUEUED COMMIT
-     ========================================================= */
-
-  const runQueuedCommit = () => {
-    if (
-      !isOpen ||
-      isAnimating ||
-      !swipeQueue.length
-    ) {
-      return;
-    }
-
-    const direction =
-      swipeQueue.shift();
-
-    viewportHeight =
-      getViewportHeight();
-
-    dragY = 0;
-    velocityY =
-      direction > 0
-        ? -COMMIT_MAX_SPEED_PX_MS
-        : COMMIT_MAX_SPEED_PX_MS;
-
-    prepareMotionGeometry();
-
-    commit(
-      direction,
-      true
-    );
-  };
-
-  /* =========================================================
-     FINISH COMMIT
-     ========================================================= */
-
-  const finishCommit = direction => {
-    if (direction > 0) {
-      recycleForward();
-    } else {
-      recycleBackward();
-    }
-
-    disableTransitions();
-
-    viewportHeight =
-      getViewportHeight();
-
-    renderTrack(0);
-    syncContent();
-
-    dragY = 0;
-    velocityY = 0;
-
-    dragging = false;
-    axisLocked = false;
-    verticalGesture = false;
-
-    isAnimating = false;
-
-    setWillChange(
-      swipeQueue.length
-        ? 'transform'
-        : 'auto'
-    );
-
-    window.dispatchEvent(
-      new CustomEvent(
-        'vb:gallery-slide-change',
-        {
-          detail: {
-            index: currentIndex,
-            artwork:
-              art[currentIndex]
-          }
-        }
-      )
-    );
-
-    if (swipeQueue.length) {
-      requestAnimationFrame(
-        runQueuedCommit
-      );
-    }
-  };
-
-  /* =========================================================
-     COMMIT DURATION
-     ========================================================= */
-
-  const getCommitDuration = (
-    remainingDistance,
-    releaseVelocity,
-    queued = false
-  ) => {
-    const velocity =
-      Math.abs(
-        releaseVelocity
-      );
-
-    const speed = clamp(
-      Math.max(
-        queued
-          ? COMMIT_MAX_SPEED_PX_MS
-          : COMMIT_BASE_SPEED_PX_MS,
-        velocity * 1.45
-      ),
-      COMMIT_MIN_SPEED_PX_MS,
-      COMMIT_MAX_SPEED_PX_MS
-    );
-
-    const duration =
-      remainingDistance /
-      speed;
-
-    return clamp(
-      duration,
-      COMMIT_MIN_DURATION_MS,
-      COMMIT_MAX_DURATION_MS
-    );
-  };
-
-  /* =========================================================
-     COMMIT
-     ========================================================= */
-
-  const commit = (
-    direction,
-    queued = false
-  ) => {
-    if (
-      !isOpen ||
-      isAnimating ||
-      !layerCurrent ||
-      !layerPrev ||
-      !layerNext
-    ) {
-      return;
-    }
-
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
-    }
-
-    isAnimating = true;
-    dragging = false;
-
-    const height =
-      viewportHeight ||
-      getViewportHeight();
-
-    const destination =
-      direction > 0
-        ? -height
-        : height;
-
-    const from =
-      clamp(
-        dragY,
-        -height,
-        height
-      );
-
-    const remainingDistance =
-      Math.abs(
-        destination - from
-      );
-
-    const duration =
-      getCommitDuration(
-        remainingDistance,
-        velocityY,
-        queued
-      );
-
-    animateTrack({
-      from,
-      to: destination,
-      duration,
-      easing: easeOutQuint,
-      onComplete: () =>
-        finishCommit(direction)
-    });
-  };
-
-  /* =========================================================
-     SNAP BACK
-     ========================================================= */
-
-  const finishSnapBack = () => {
-    disableTransitions();
-
-    dragY = 0;
-    velocityY = 0;
-
-    dragging = false;
-    axisLocked = false;
-    verticalGesture = false;
-
-    isAnimating = false;
-
-    renderTrack(0);
-
-    setWillChange(
-      swipeQueue.length
-        ? 'transform'
-        : 'auto'
-    );
-
-    if (swipeQueue.length) {
-      requestAnimationFrame(
-        runQueuedCommit
-      );
-    }
-  };
-
-  const snapBack = () => {
-    if (
-      !isOpen ||
-      isAnimating
-    ) {
-      return;
-    }
-
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
-    }
-
-    isAnimating = true;
-    dragging = false;
-
-    const height =
-      viewportHeight ||
-      getViewportHeight();
-
-    const from =
-      clamp(
-        dragY,
-        -height,
-        height
-      );
-
-    const distanceRatio =
-      Math.abs(from) /
-      Math.max(1, height);
-
-    const duration =
-      clamp(
-        SNAP_MIN_DURATION_MS +
-          distanceRatio * 130,
-        SNAP_MIN_DURATION_MS,
-        SNAP_MAX_DURATION_MS
-      );
-
-    animateTrack({
-      from,
-      to: 0,
-      duration,
-      easing: easeOutCubic,
-      onComplete:
-        finishSnapBack
-    });
-  };
-
-  /* =========================================================
-     GESTURE
-     ========================================================= */
-
-  const beginGesture = (x, y) => {
-    if (!isOpen) return false;
-
-    if (isAnimating) {
-      beginQueuedGesture(x, y);
-      return true;
-    }
-
-    clearMotion();
-    prepareMotionGeometry();
-
-    dragging = true;
-    axisLocked = false;
-    verticalGesture = false;
-
-    startX = x;
-    startY = y;
-
-    lastY = y;
-    lastTime =
-      performance.now();
-
-    velocityY = 0;
-    dragY = 0;
-
-    return true;
-  };
-
-  const updateGesture = (x, y) => {
-    if (!isOpen) return false;
-
-    if (isAnimating) {
-      return updateQueuedGesture(
-        x,
-        y
-      );
-    }
-
-    if (!dragging) {
-      return false;
-    }
-
-    const rawX =
-      x - startX;
-
-    const rawY =
-      y - startY;
-
-    if (!axisLocked) {
-      if (
-        Math.abs(rawX) <
-          AXIS_LOCK_PX &&
-        Math.abs(rawY) <
-          AXIS_LOCK_PX
-      ) {
-        return false;
-      }
-
-      axisLocked = true;
-
-      verticalGesture =
-        Math.abs(rawY) >
-        Math.abs(rawX);
-
-      if (!verticalGesture) {
-        dragging = false;
-        resetLayerGeometry();
-        return false;
-      }
-    }
-
-    if (!verticalGesture) {
-      return false;
-    }
-
-    const now =
-      performance.now();
-
-    const dt =
-      Math.max(
-        1,
-        now - lastTime
-      );
-
-    const instantVelocity =
-      (y - lastY) / dt;
-
-    velocityY =
-      velocityY *
-        (1 - VELOCITY_SMOOTHING) +
-      instantVelocity *
-        VELOCITY_SMOOTHING;
-
-    lastY = y;
-    lastTime = now;
-
-    const height =
-      viewportHeight ||
-      getViewportHeight();
-
-    dragY =
-      clamp(
-        rawY,
-        -height,
-        height
-      );
-
-    requestDragRender();
-
-    return true;
-  };
-
-  const endGesture = cancelled => {
-    if (isAnimating) {
-      endQueuedGesture(
-        cancelled
-      );
-
-      return;
-    }
-
-    if (!dragging) return;
-
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
-
-      if (verticalGesture) {
-        renderTrack(dragY);
-      }
-    }
-
-    const distance =
-      Math.abs(dragY);
-
-    const height =
-      viewportHeight ||
-      getViewportHeight();
-
-    const distanceThreshold =
-      Math.max(
-        COMMIT_MIN_DISTANCE_PX,
-        height *
-          COMMIT_DISTANCE_RATIO
-      );
-
-    const distanceCommit =
-      distance >=
-      distanceThreshold;
-
-    const flickCommit =
-      distance >=
-        FLICK_MIN_DISTANCE_PX &&
-      Math.abs(velocityY) >=
-        FLICK_VELOCITY_PX_MS &&
-      Math.sign(velocityY) ===
-        Math.sign(dragY);
-
-    const direction =
-      dragY < 0 ? 1 : -1;
-
-    if (
-      !cancelled &&
-      verticalGesture &&
-      dragY !== 0 &&
-      (
-        distanceCommit ||
-        flickCommit
-      )
-    ) {
-      commit(direction);
-      return;
-    }
-
-    if (
-      verticalGesture &&
-      dragY !== 0
-    ) {
-      snapBack();
-      return;
-    }
-
-    dragY = 0;
-    velocityY = 0;
-
-    dragging = false;
-    axisLocked = false;
-    verticalGesture = false;
-
-    resetLayerGeometry();
-
-    if (swipeQueue.length) {
-      requestAnimationFrame(
-        runQueuedCommit
-      );
-    }
-  };
-
-  /* =========================================================
-     TOUCH
-     ========================================================= */
-
-  const handleTouchStart = event => {
-    if (
-      !isOpen ||
-      event.touches.length !== 1 ||
-      event.target.closest(
-        '.gallery-viewer__back'
-      )
-    ) {
-      return;
-    }
-
-    const touch =
-      event.touches[0];
-
-    beginGesture(
-      touch.clientX,
-      touch.clientY
-    );
-  };
-
-  const handleTouchMove = event => {
-    if (
-      !isOpen ||
-      event.touches.length !== 1
-    ) {
-      return;
-    }
-
-    if (
-      !dragging &&
-      !queueTracking
-    ) {
-      return;
-    }
-
-    const touch =
-      event.touches[0];
-
-    const consumed =
-      updateGesture(
-        touch.clientX,
-        touch.clientY
-      );
-
-    if (consumed) {
-      event.preventDefault();
-    }
-  };
-
-  const handleTouchEnd = () => {
-    endGesture(false);
-  };
-
-  const handleTouchCancel = () => {
-    endGesture(true);
-  };
-
-  /* =========================================================
-     POINTER / DESKTOP
-     ========================================================= */
-
-  const handlePointerDown = event => {
-    if (
-      !isOpen ||
-      event.pointerType === 'touch' ||
-      event.button !== 0 ||
-      event.target.closest(
-        '.gallery-viewer__back'
-      )
-    ) {
-      return;
-    }
-
-    if (
-      !beginGesture(
-        event.clientX,
-        event.clientY
-      )
-    ) {
-      return;
-    }
-
-    pointerId =
-      event.pointerId;
-
-    viewport?.setPointerCapture?.(
-      event.pointerId
-    );
-
-    event.preventDefault();
-  };
-
-  const handlePointerMove = event => {
-    if (
-      !isOpen ||
-      event.pointerType === 'touch' ||
-      pointerId !==
-        event.pointerId
-    ) {
-      return;
-    }
-
-    if (
-      !dragging &&
-      !queueTracking
-    ) {
-      return;
-    }
-
-    const consumed =
-      updateGesture(
-        event.clientX,
-        event.clientY
-      );
-
-    if (consumed) {
-      event.preventDefault();
-    }
-  };
-
-  const releasePointer = event => {
-    if (
-      viewport?.hasPointerCapture?.(
-        event.pointerId
-      )
-    ) {
-      viewport.releasePointerCapture(
-        event.pointerId
-      );
-    }
-
-    pointerId = null;
-  };
-
-  const handlePointerUp = event => {
-    if (
-      event.pointerType === 'touch' ||
-      pointerId !==
-        event.pointerId
-    ) {
-      return;
-    }
-
-    releasePointer(event);
-    endGesture(false);
-  };
-
-  const handlePointerCancel = event => {
-    if (
-      event.pointerType === 'touch' ||
-      pointerId !==
-        event.pointerId
-    ) {
-      return;
-    }
-
-    releasePointer(event);
-    endGesture(true);
-  };
-
-  /* =========================================================
-     BACK ARROW
+     BACK
      ========================================================= */
 
   const createBackButton = () => {
-    const button =
-      createElement(
-        'button',
-        'gallery-viewer__back'
-      );
-
-    const image =
-      createElement(
-        'img',
-        'gallery-viewer__back-icon'
-      );
+    const button = el('button', 'gallery-viewer__back');
+    const image = el('img', 'gallery-viewer__back-icon');
 
     button.type = 'button';
+    button.setAttribute('aria-label', 'Back to menu');
 
-    button.setAttribute(
-      'aria-label',
-      'Back to menu'
-    );
-
-    image.src =
-      '/assets/icons/arrow-left.svg';
-
+    image.src = '/assets/icons/arrow-left.svg';
     image.alt = '';
     image.decoding = 'async';
     image.draggable = false;
 
     button.appendChild(image);
 
-    button.addEventListener(
-      'click',
-      event => {
-        event.preventDefault();
-        event.stopPropagation();
-
-        closeGallery();
-      }
-    );
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeGallery();
+    });
 
     return button;
   };
 
   /* =========================================================
-     VIEWER BUILD
+     VIEWER
      ========================================================= */
 
   const buildGallery = () => {
-    if (gallery) return;
+    if (refs.gallery) return;
 
-    gallery =
-      createElement(
-        'section',
-        'gallery-viewer'
-      );
+    refs.gallery = el('section', 'gallery-viewer');
+    refs.viewport = el('div', 'gallery-viewer__viewport');
 
-    gallery.id =
-      'galleryViewer';
+    refs.gallery.id = 'galleryViewer';
+    refs.gallery.setAttribute('aria-label', 'Artwork gallery');
+    refs.gallery.setAttribute('aria-hidden', 'true');
 
-    gallery.setAttribute(
-      'aria-label',
-      'Artwork gallery'
-    );
+    refs.layerPrev = createLayer('previous');
+    refs.layerCurrent = createLayer('current');
+    refs.layerNext = createLayer('next');
 
-    gallery.setAttribute(
-      'aria-hidden',
-      'true'
-    );
+    refs.viewport.append(refs.layerPrev, refs.layerCurrent, refs.layerNext);
+    refs.gallery.append(refs.viewport, createBackButton());
+    document.body.appendChild(refs.gallery);
 
-    viewport =
-      createElement(
-        'div',
-        'gallery-viewer__viewport'
-      );
-
-    layerPrev =
-      createLayer('previous');
-
-    layerCurrent =
-      createLayer('current');
-
-    layerNext =
-      createLayer('next');
-
-    backButton =
-      createBackButton();
-
-    viewport.append(
-      layerPrev,
-      layerCurrent,
-      layerNext
-    );
-
-    gallery.append(
-      viewport,
-      backButton
-    );
-
-    document.body.appendChild(
-      gallery
-    );
-
-    resetLayerGeometry();
-
-    viewport.addEventListener(
-      'touchstart',
-      handleTouchStart,
-      { passive: true }
-    );
-
-    viewport.addEventListener(
-      'touchmove',
-      handleTouchMove,
-      { passive: false }
-    );
-
-    viewport.addEventListener(
-      'touchend',
-      handleTouchEnd,
-      { passive: true }
-    );
-
-    viewport.addEventListener(
-      'touchcancel',
-      handleTouchCancel,
-      { passive: true }
-    );
-
-    viewport.addEventListener(
-      'pointerdown',
-      handlePointerDown
-    );
-
-    viewport.addEventListener(
-      'pointermove',
-      handlePointerMove
-    );
-
-    viewport.addEventListener(
-      'pointerup',
-      handlePointerUp
-    );
-
-    viewport.addEventListener(
-      'pointercancel',
-      handlePointerCancel
-    );
+    initializeSwipe();
   };
 
   /* =========================================================
-     KEYBOARD
+     SWIPE ENGINE
      ========================================================= */
 
-  const keyboardCommit =
-    direction => {
-      if (!isOpen) return;
-
-      if (isAnimating) {
-        enqueueSwipe(
-          direction
-        );
-
-        return;
+  const initializeSwipe = () => {
+    if (swipe || typeof window.initVBSwipe !== 'function') {
+      if (!swipe && typeof window.initVBSwipe !== 'function') {
+        console.error('[VB Gallery] swipe.js is not loaded.');
       }
-
-      viewportHeight =
-        getViewportHeight();
-
-      dragY = 0;
-
-      velocityY =
-        direction > 0
-          ? -COMMIT_BASE_SPEED_PX_MS
-          : COMMIT_BASE_SPEED_PX_MS;
-
-      prepareMotionGeometry();
-
-      commit(direction);
-    };
-
-  const handleKeyDown = event => {
-    if (!isOpen) return;
-
-    if (
-      event.key === 'Escape'
-    ) {
-      event.preventDefault();
-      closeGallery();
       return;
     }
 
-    if (
-      event.key ===
-        'ArrowDown' ||
-      event.key ===
-        'PageDown'
-    ) {
-      event.preventDefault();
-      keyboardCommit(1);
-      return;
-    }
+    swipe = window.initVBSwipe({
+      refs,
+      state,
+      getItems: () => art,
+      normalizeIndex,
+      vh,
+      setLayerContent,
+      preloadAround,
 
-    if (
-      event.key ===
-        'ArrowUp' ||
-      event.key ===
-        'PageUp'
-    ) {
-      event.preventDefault();
-      keyboardCommit(-1);
-    }
+      onCommit(index) {
+        state.index = normalizeIndex(index);
+        preloadAround(state.index);
+
+        window.dispatchEvent(new CustomEvent('vb:gallery-slide-change', {
+          detail: {
+            index: state.index,
+            artwork: art[state.index]
+          }
+        }));
+      }
+    });
   };
 
   /* =========================================================
-     OPEN
+     OPEN / CLOSE
      ========================================================= */
 
-  const openGallery = (
-    requestedIndex = 0
-  ) => {
-    art =
-      Array.isArray(window.ART)
-        ? window.ART
-        : [];
+  const openGallery = (requestedIndex = 0) => {
+    art = Array.isArray(window.ART) ? window.ART : [];
 
     if (!art.length) {
-      console.error(
-        '[VB Gallery] window.ART is empty or art.js is not loaded.'
-      );
-
+      console.error('[VB Gallery] window.ART is empty or art.js is not loaded.');
       return;
     }
 
     buildGallery();
+    initializeSwipe();
 
-    if (!gallery) return;
+    if (!swipe) return;
 
-    const parsedIndex =
-      Number(requestedIndex);
+    const parsedIndex = Number(requestedIndex);
+    state.index = Number.isInteger(parsedIndex) ? normalizeIndex(parsedIndex) : 0;
+    state.isOpen = true;
 
-    currentIndex =
-      Number.isInteger(
-        parsedIndex
-      )
-        ? normalizeIndex(
-            parsedIndex
-          )
-        : 0;
+    syncLayers();
+    swipe.reset?.();
 
-    clearMotion();
-    clearSwipeQueue();
+    previousBodyOverflow = document.body.style.overflow;
+    previousHtmlOverflow = document.documentElement.style.overflow;
+    previousBodyTouchAction = document.body.style.touchAction;
 
-    isAnimating = false;
-    dragging = false;
-    axisLocked = false;
-    verticalGesture = false;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.touchAction = 'none';
 
-    pointerId = null;
-
-    dragY = 0;
-    velocityY = 0;
-
-    viewportHeight =
-      getViewportHeight();
-
-    syncContent();
-    resetLayerGeometry();
-
-    previousBodyOverflow =
-      document.body.style.overflow;
-
-    previousHtmlOverflow =
-      document.documentElement.style.overflow;
-
-    previousBodyTouchAction =
-      document.body.style.touchAction;
-
-    document.body.style.overflow =
-      'hidden';
-
-    document.documentElement.style.overflow =
-      'hidden';
-
-    document.body.style.touchAction =
-      'none';
-
-    gallery.setAttribute(
-      'aria-hidden',
-      'false'
-    );
-
-    gallery.classList.add(
-      'is-open'
-    );
-
-    isOpen = true;
-
-    window.addEventListener(
-      'keydown',
-      handleKeyDown
-    );
+    refs.gallery.setAttribute('aria-hidden', 'false');
+    refs.gallery.classList.add('is-open');
 
     requestAnimationFrame(() => {
-      if (
-        !gallery ||
-        !isOpen
-      ) {
-        return;
-      }
-
-      gallery.classList.add(
-        'is-visible'
-      );
+      if (state.isOpen) refs.gallery.classList.add('is-visible');
     });
 
-    window.dispatchEvent(
-      new CustomEvent(
-        'vb:gallery-opened',
-        {
-          detail: {
-            index: currentIndex,
-            artwork:
-              art[currentIndex]
-          }
-        }
-      )
-    );
+    window.dispatchEvent(new CustomEvent('vb:gallery-opened', {
+      detail: {
+        index: state.index,
+        artwork: art[state.index]
+      }
+    }));
   };
 
-  /* =========================================================
-     CLOSE
-     ========================================================= */
-
   function closeGallery() {
-    if (
-      !gallery ||
-      !isOpen
-    ) {
-      return;
-    }
+    if (!refs.gallery || !state.isOpen) return;
 
-    clearMotion();
-    clearSwipeQueue();
+    state.isOpen = false;
+    swipe?.cancel?.();
 
-    isOpen = false;
-    isAnimating = false;
-    dragging = false;
-    axisLocked = false;
-    verticalGesture = false;
-
-    pointerId = null;
-
-    dragY = 0;
-    velocityY = 0;
-
-    gallery.classList.remove(
-      'is-visible'
-    );
-
-    window.removeEventListener(
-      'keydown',
-      handleKeyDown
-    );
-
-    document.body.style.overflow =
-      previousBodyOverflow;
-
-    document.documentElement.style.overflow =
-      previousHtmlOverflow;
-
-    document.body.style.touchAction =
-      previousBodyTouchAction;
+    refs.gallery.classList.remove('is-visible');
+    document.body.style.overflow = previousBodyOverflow;
+    document.documentElement.style.overflow = previousHtmlOverflow;
+    document.body.style.touchAction = previousBodyTouchAction;
 
     window.setTimeout(() => {
-      if (
-        !gallery ||
-        isOpen
-      ) {
-        return;
-      }
+      if (state.isOpen) return;
 
-      gallery.classList.remove(
-        'is-open'
-      );
-
-      gallery.setAttribute(
-        'aria-hidden',
-        'true'
-      );
-
-      resetLayerGeometry();
+      refs.gallery.classList.remove('is-open');
+      refs.gallery.setAttribute('aria-hidden', 'true');
+      swipe?.reset?.();
     }, 220);
 
-    window.dispatchEvent(
-      new CustomEvent(
-        'vb:gallery-closed'
-      )
-    );
+    window.dispatchEvent(new CustomEvent('vb:gallery-closed'));
   }
 
   /* =========================================================
-     APP EVENTS
+     EVENTS
      ========================================================= */
 
-  const handleGalleryOpenRequest =
-    event => {
-      const requestedIndex =
-        Number(
-          event.detail?.index
-        );
-
-      openGallery(
-        Number.isInteger(
-          requestedIndex
-        )
-          ? requestedIndex
-          : 0
-      );
-    };
-
-  window.addEventListener(
-    'vb:gallery-open-view',
-    handleGalleryOpenRequest
-  );
-
-  /* =========================================================
-     RESIZE
-     ========================================================= */
-
-  const handleResize = () => {
-    if (
-      !gallery ||
-      !isOpen ||
-      dragging ||
-      isAnimating
-    ) {
-      return;
-    }
-
-    viewportHeight =
-      getViewportHeight();
-
-    resetLayerGeometry();
+  const handleOpen = event => {
+    const index = Number(event.detail?.index);
+    openGallery(Number.isInteger(index) ? index : 0);
   };
 
-  window.addEventListener(
-    'resize',
-    handleResize,
-    { passive: true }
-  );
+  const handleKeyDown = event => {
+    if (!state.isOpen) return;
 
-  window.addEventListener(
-    'orientationchange',
-    handleResize,
-    { passive: true }
-  );
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeGallery();
+    }
+  };
 
-  window.visualViewport
-    ?.addEventListener(
-      'resize',
-      handleResize,
-      { passive: true }
-    );
+  const handleResize = () => {
+    if (state.isOpen) swipe?.resize?.();
+  };
 
-  /* =========================================================
-     VISIBILITY RECOVERY
-     ========================================================= */
-
-  const recoverVisibleState =
-    () => {
-      if (!isOpen) return;
-
-      clearMotion();
-      clearSwipeQueue();
-
-      isAnimating = false;
-      dragging = false;
-      axisLocked = false;
-      verticalGesture = false;
-
-      pointerId = null;
-
-      dragY = 0;
-      velocityY = 0;
-
-      viewportHeight =
-        getViewportHeight();
-
-      syncContent();
-      resetLayerGeometry();
-    };
-
-  document.addEventListener(
-    'visibilitychange',
-    () => {
-      if (
-        document.visibilityState ===
-        'visible'
-      ) {
-        recoverVisibleState();
-      }
-    },
-    { passive: true }
-  );
-
-  window.addEventListener(
-    'pageshow',
-    recoverVisibleState,
-    { passive: true }
-  );
+  window.addEventListener('vb:gallery-open-view', handleOpen);
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('resize', handleResize, { passive: true });
+  window.addEventListener('orientationchange', handleResize, { passive: true });
+  window.visualViewport?.addEventListener('resize', handleResize, { passive: true });
 
   /* =========================================================
-     CLEANUP
+     PUBLIC API
      ========================================================= */
 
-  window.addEventListener(
-    'pagehide',
-    () => {
-      clearMotion();
-      clearSwipeQueue();
-
-      window.removeEventListener(
-        'vb:gallery-open-view',
-        handleGalleryOpenRequest
-      );
-
-      window.removeEventListener(
-        'keydown',
-        handleKeyDown
-      );
-
-      window.removeEventListener(
-        'resize',
-        handleResize
-      );
-
-      window.removeEventListener(
-        'orientationchange',
-        handleResize
-      );
-
-      window.visualViewport
-        ?.removeEventListener(
-          'resize',
-          handleResize
-        );
-
-      isOpen = false;
-      isAnimating = false;
-      dragging = false;
-
-      pointerId = null;
-    },
-    { once: true }
-  );
+  window.VBGallery = {
+    open: openGallery,
+    close: closeGallery,
+    getIndex: () => state.index,
+    isOpen: () => state.isOpen
+  };
 })();
