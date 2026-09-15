@@ -1,14 +1,24 @@
 /* =========================================================
    VÁCLAV BUCHTELÍK — GALLERY
-   FULLSCREEN VIRTUALIZED ARTWORK SWIPE VIEWER
+   CINEMATIC ARTWORK STAGE
+   FULLSCREEN VIRTUALIZED SWIPE VIEWER
+   PREVIOUS + CURRENT + NEXT
    ========================================================= */
 
 :root {
+  --gallery-bg: #050505;
+  --gallery-board: #0a0a0a;
   --gallery-foreground: #fff;
-  --gallery-secondary: rgba(255,255,255,.72);
-  --gallery-ui-side: max(18px,env(safe-area-inset-left,0px));
-  --gallery-ui-top: max(16px,env(safe-area-inset-top,0px));
-  --gallery-ui-bottom: max(22px,env(safe-area-inset-bottom,0px));
+  --gallery-secondary: rgba(255,255,255,.62);
+
+  --gallery-ui-left: max(18px,env(safe-area-inset-left,0px));
+  --gallery-ui-right: max(18px,env(safe-area-inset-right,0px));
+  --gallery-ui-top: max(14px,env(safe-area-inset-top,0px));
+  --gallery-ui-bottom: max(18px,env(safe-area-inset-bottom,0px));
+
+  --gallery-header-height: 62px;
+  --gallery-meta-height: 94px;
+  --gallery-stage-gap: 14px;
 }
 
 /* =========================================================
@@ -26,7 +36,7 @@
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
-  background: #000;
+  background: var(--gallery-bg);
   isolation: isolate;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
@@ -39,7 +49,9 @@
   transition: opacity 180ms ease,visibility 0s;
 }
 
-.gallery-viewer.is-visible { opacity: 1; }
+.gallery-viewer.is-visible {
+  opacity: 1;
+}
 
 /* =========================================================
    VIEWPORT
@@ -48,6 +60,7 @@
 .gallery-viewer__viewport {
   position: absolute;
   inset: 0;
+  z-index: 1;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -59,10 +72,13 @@
   cursor: grab;
 }
 
-.gallery-viewer__viewport:active { cursor: grabbing; }
+.gallery-viewer__viewport:active {
+  cursor: grabbing;
+}
 
 /* =========================================================
-   VIRTUALIZED LAYERS — PREVIOUS + CURRENT + NEXT
+   VIRTUALIZED SLIDES
+   EACH SLIDE IS ONE FIXED FULLSCREEN BOARD
    ========================================================= */
 
 .gallery-viewer__layer {
@@ -72,49 +88,71 @@
   width: 100%;
   height: 100%;
   margin: 0;
-  padding: 0;
+  padding:
+    calc(var(--gallery-ui-top) + var(--gallery-header-height))
+    var(--gallery-ui-right)
+    calc(var(--gallery-ui-bottom) + var(--gallery-meta-height))
+    var(--gallery-ui-left);
   overflow: hidden;
-  background: #000;
+  background: var(--gallery-board);
   transform: translate3d(0,0,0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  will-change: transform;
+  contain: layout paint;
 }
 
-.gallery-viewer__layer--previous { transform: translate3d(0,-100%,0); }
-.gallery-viewer__layer--current { transform: translate3d(0,0,0); }
-.gallery-viewer__layer--next { transform: translate3d(0,100%,0); }
+.gallery-viewer__layer--previous {
+  transform: translate3d(0,-100%,0);
+}
+
+.gallery-viewer__layer--current {
+  transform: translate3d(0,0,0);
+}
+
+.gallery-viewer__layer--next {
+  transform: translate3d(0,100%,0);
+}
 
 /* =========================================================
-   MEDIA — TRUE FULLSCREEN
+   ART STAGE
+   FIXED GEOMETRY — SOURCE IMAGE NEVER DEFINES THE SLIDE
    ========================================================= */
 
 .gallery-viewer__media {
-  position: absolute;
-  inset: 0;
+  position: relative;
   z-index: 1;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   margin: 0;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  background: #000;
+  background: #080808;
 }
 
+/*
+   The photograph is always shown whole.
+   Different source dimensions therefore no longer change
+   the geometry of the swipe layer.
+*/
 .gallery-viewer__image {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  z-index: 1;
   display: block;
   width: 100%;
   height: 100%;
-  max-width: none;
-  max-height: none;
+  max-width: 100%;
+  max-height: 100%;
   margin: 0;
   padding: 0;
   border: 0;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
-  background: #000;
+  background: transparent;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
@@ -126,131 +164,209 @@
 }
 
 /* =========================================================
-   CINEMATIC METADATA GRADIENT
+   SUBTLE STAGE DEPTH
    ========================================================= */
 
-.gallery-viewer__layer::after {
+.gallery-viewer__media::before {
   content: "";
   position: absolute;
-  z-index: 2;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: min(42vh,420px);
+  inset: 0;
+  z-index: 0;
   pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(0,0,0,0) 0%,
-    rgba(0,0,0,.04) 18%,
-    rgba(0,0,0,.18) 45%,
-    rgba(0,0,0,.58) 100%
-  );
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(255,255,255,.025) 0%,
+      rgba(255,255,255,.012) 38%,
+      rgba(0,0,0,.10) 72%,
+      rgba(0,0,0,.28) 100%
+    );
 }
 
 /* =========================================================
-   METADATA — TIKBOO STYLE
+   METADATA RAIL
+   FIXED POSITION ON EVERY SLIDE
    ========================================================= */
 
 .gallery-viewer__meta {
   position: absolute;
-  z-index: 3;
-  left: var(--gallery-ui-side);
-  right: max(18px,env(safe-area-inset-right,0px));
+  z-index: 4;
+  left: var(--gallery-ui-left);
+  right: var(--gallery-ui-right);
   bottom: var(--gallery-ui-bottom);
-  width: auto;
+  height: var(--gallery-meta-height);
   margin: 0;
-  padding: 0;
+  padding: var(--gallery-stage-gap) 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: hidden;
   pointer-events: none;
-  text-shadow: 0 1px 3px rgba(0,0,0,.7);
+}
+
+.gallery-viewer__meta::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 38px;
+  height: 1px;
+  background: rgba(255,255,255,.42);
 }
 
 .gallery-viewer__title,
 .gallery-viewer__details {
+  position: relative;
+  z-index: 1;
   width: 100%;
   margin: 0;
   padding: 0;
   font-family: "Chakra Petch",Arial,sans-serif;
-  overflow-wrap: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .gallery-viewer__title {
   color: var(--gallery-foreground);
-  font-size: clamp(15px,4vw,18px);
+  font-size: clamp(16px,4.3vw,19px);
   font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: .01em;
+  line-height: 1.15;
+  letter-spacing: .025em;
+  white-space: nowrap;
 }
 
 .gallery-viewer__details {
-  margin-top: 4px;
+  margin-top: 6px;
   color: var(--gallery-secondary);
-  font-size: clamp(12px,3.2vw,14px);
+  font-size: clamp(11px,3vw,13px);
   font-weight: 400;
   line-height: 1.3;
-  letter-spacing: .01em;
+  letter-spacing: .025em;
+  white-space: nowrap;
 }
 
-.gallery-viewer__details[hidden] { display: none; }
+.gallery-viewer__details[hidden] {
+  display: none;
+}
 
 /* =========================================================
-   BACK CONTROL
-   Temporary DOM class remains gallery-viewer__close.
-   Visual X is removed completely.
+   BACK ARROW
+   REAL /assets/icons/arrow-left.svg FROM gallery.js
    ========================================================= */
 
-.gallery-viewer__close {
+.gallery-viewer__back {
   position: absolute;
-  z-index: 20;
+  z-index: 100;
   top: var(--gallery-ui-top);
-  left: var(--gallery-ui-side);
-  right: auto;
-  width: 46px;
-  height: 46px;
+  left: var(--gallery-ui-left);
+  width: 52px;
+  height: 52px;
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 0;
   outline: 0;
   appearance: none;
   -webkit-appearance: none;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  overflow: visible;
   background: transparent;
-  color: #fff;
   cursor: pointer;
   opacity: 0;
-  transform: translate3d(-8px,0,0);
-  transition: opacity 180ms ease,transform 260ms cubic-bezier(.15,.85,.2,1);
+  transform: translate3d(-10px,0,0);
+  transition:
+    opacity 220ms ease,
+    transform 360ms cubic-bezier(.15,.85,.2,1);
   -webkit-tap-highlight-color: transparent;
 }
 
-.gallery-viewer.is-visible .gallery-viewer__close {
-  opacity: .9;
+.gallery-viewer.is-visible .gallery-viewer__back {
+  opacity: 1;
   transform: translate3d(0,0,0);
 }
 
-.gallery-viewer__close:hover,
-.gallery-viewer__close:focus-visible { opacity: 1; }
+.gallery-viewer__back-icon {
+  display: block;
+  width: 34px;
+  height: 34px;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  object-fit: contain;
+  object-position: center;
+  opacity: .94;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,.45));
+  transform: translateZ(0);
+  transition:
+    opacity 160ms ease,
+    transform 320ms cubic-bezier(.15,.85,.2,1);
+}
 
-.gallery-viewer__close:active { opacity: .55; }
+.gallery-viewer__back:hover .gallery-viewer__back-icon,
+.gallery-viewer__back:focus-visible .gallery-viewer__back-icon {
+  opacity: 1;
+  transform: translate3d(-3px,0,0);
+}
 
-/* Remove old X */
-.gallery-viewer__close-line { display: none; }
+.gallery-viewer__back:active .gallery-viewer__back-icon {
+  opacity: .55;
+  transform: translate3d(-6px,0,0) scale(.96);
+}
+
+/* =========================================================
+   LEGACY CLOSE
+   MUST NEVER APPEAR
+   ========================================================= */
+
+.gallery-viewer__close,
+.gallery-viewer__close-line,
+.gallery-viewer__close-line--a,
+.gallery-viewer__close-line--b {
+  display: none !important;
+}
 
 /* =========================================================
    PERFORMANCE
    ========================================================= */
 
 .gallery-viewer__layer,
-.gallery-viewer__media,
 .gallery-viewer__image {
   -webkit-transform-style: preserve-3d;
   transform-style: preserve-3d;
 }
 
-.gallery-viewer__layer {
-  contain: layout paint;
+/* =========================================================
+   SHORT MOBILE VIEWPORT
+   ========================================================= */
+
+@media (max-height:700px) {
+  :root {
+    --gallery-header-height: 56px;
+    --gallery-meta-height: 82px;
+    --gallery-stage-gap: 11px;
+  }
+
+  .gallery-viewer__back {
+    width: 46px;
+    height: 46px;
+  }
+
+  .gallery-viewer__back-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .gallery-viewer__details {
+    margin-top: 4px;
+  }
 }
 
 /* =========================================================
@@ -259,18 +375,32 @@
 
 @media (min-width:768px) {
   :root {
-    --gallery-ui-side: max(28px,env(safe-area-inset-left,0px));
+    --gallery-ui-left: max(30px,env(safe-area-inset-left,0px));
+    --gallery-ui-right: max(30px,env(safe-area-inset-right,0px));
+    --gallery-ui-top: max(20px,env(safe-area-inset-top,0px));
     --gallery-ui-bottom: max(28px,env(safe-area-inset-bottom,0px));
+    --gallery-header-height: 68px;
+    --gallery-meta-height: 104px;
+  }
+
+  .gallery-viewer__media {
+    width: min(100%,1100px);
+    margin-inline: auto;
   }
 
   .gallery-viewer__meta {
-    right: max(28px,env(safe-area-inset-right,0px));
-    max-width: 720px;
+    right: auto;
+    width: min(720px,calc(100% - var(--gallery-ui-left) - var(--gallery-ui-right)));
   }
 
-  .gallery-viewer__close {
-    width: 50px;
-    height: 50px;
+  .gallery-viewer__back {
+    width: 56px;
+    height: 56px;
+  }
+
+  .gallery-viewer__back-icon {
+    width: 38px;
+    height: 38px;
   }
 }
 
@@ -280,13 +410,20 @@
 
 @media (min-width:1200px) {
   :root {
-    --gallery-ui-side: max(40px,env(safe-area-inset-left,0px));
+    --gallery-ui-left: max(44px,env(safe-area-inset-left,0px));
+    --gallery-ui-right: max(44px,env(safe-area-inset-right,0px));
+    --gallery-ui-top: max(28px,env(safe-area-inset-top,0px));
     --gallery-ui-bottom: max(34px,env(safe-area-inset-bottom,0px));
+    --gallery-header-height: 72px;
+    --gallery-meta-height: 110px;
+  }
+
+  .gallery-viewer__media {
+    width: min(100%,1280px);
   }
 
   .gallery-viewer__meta {
-    right: auto;
-    width: min(720px,55vw);
+    width: min(760px,55vw);
   }
 }
 
@@ -296,5 +433,8 @@
 
 @media (prefers-reduced-motion:reduce) {
   .gallery-viewer,
-  .gallery-viewer__close { transition-duration: 1ms; }
+  .gallery-viewer__back,
+  .gallery-viewer__back-icon {
+    transition-duration: 1ms;
+  }
 }
