@@ -718,7 +718,7 @@
     10px
     var(--arrow-safe)
     12px
-    40;
+    30;
 
   border-top:
     1px solid
@@ -1118,5 +1118,5 @@
    ========================================================= */
 
 .main-menu__panel-inner > * {
-  transform: translate3d(40px, 0, 0);
+  transform: translate3d(30px, 0, 0);
 }
