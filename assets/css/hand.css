@@ -233,6 +233,13 @@
       rotate(0deg);
   }
 
+  52% {
+    opacity: 1;
+    transform:
+      translate3d(calc(-50% + 16px), calc(-50% - 28px), 0)
+      rotate(calc(var(--hand-rotation) + 6deg));
+  }
+
   100% {
     opacity: 1;
     transform:
