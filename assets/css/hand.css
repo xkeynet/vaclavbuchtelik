@@ -219,7 +219,7 @@
   }
 
   /* Plynulý náběh do oblouku doprava nahoru */
-  25% {
+  15% {
     transform:
       translate3d(calc(-50% + 25px), calc(-50% - 40px), 0)
       rotate(calc(var(--hand-rotation) + 8deg));
