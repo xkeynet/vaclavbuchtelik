@@ -219,14 +219,14 @@
   }
 
   /* Plynulý náběh do oblouku doprava nahoru */
-  35% {
+  25% {
     transform:
       translate3d(calc(-50% + 25px), calc(-50% - 40px), 0)
       rotate(calc(var(--hand-rotation) + 8deg));
   }
 
   /* Vrchol oblouku */
-  60% {
+  40% {
     transform:
       translate3d(calc(-50% + 42px), calc(-50% - 65px), 0)
       rotate(0deg);
