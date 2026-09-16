@@ -10,7 +10,7 @@
 
   const HAND_ENTER_MS = 1900;
   const HAND_SETTLE_MS = 650;
-  const HAND_SWIPE_MS = 1850;
+  const HAND_SWIPE_MS = 3000;
   const BETWEEN_SWIPES_MS = 720;
   const AFTER_SWIPES_HOLD_MS = 520;
   const HAND_EXIT_MS = 1500;
@@ -137,6 +137,7 @@
 
   /* =========================================================
      ENTER
+     RIGHT -> CENTER
      ========================================================= */
 
   const enter = async id => {
@@ -165,7 +166,8 @@
 
   /* =========================================================
      SWIPE
-     3 BODY — START -> ŠVIH OBLOUKEM -> POMALÝ NÁVRAT
+     REST -> JEMNĚ NAHORU -> ŠVIH DOPRAVA OBLOUKEM
+     -> PLYNULÝ NÁVRAT STEJNOU TRAJEKTORIÍ
      ========================================================= */
 
   const swipe = async id => {
@@ -181,8 +183,16 @@
           offset: 0
         },
         {
-          transform: `translate3d(calc(-50% + 120px), calc(-50% - 105px), 0) rotate(${HAND_ROTATION + 40}deg)`,
-          offset: 0.30
+          transform: `translate3d(-50%, calc(-50% - 28px), 0) rotate(${HAND_ROTATION - 2}deg)`,
+          offset: 0.20
+        },
+        {
+          transform: `translate3d(calc(-50% + 135px), calc(-50% - 65px), 0) rotate(${HAND_ROTATION + 13}deg)`,
+          offset: 0.55
+        },
+        {
+          transform: `translate3d(-50%, calc(-50% - 28px), 0) rotate(${HAND_ROTATION - 2}deg)`,
+          offset: 0.80
         },
         {
           transform: REST,
@@ -191,7 +201,7 @@
       ],
       {
         duration: HAND_SWIPE_MS,
-        easing: 'ease-in-out',
+        easing: 'cubic-bezier(.45,0,.2,1)',
         fill: 'forwards'
       },
       id
@@ -202,6 +212,7 @@
 
   /* =========================================================
      EXIT
+     CENTER -> RIGHT
      ========================================================= */
 
   const exit = async id => {
