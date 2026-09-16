@@ -212,9 +212,8 @@
 }
 
 @keyframes galleryHandSwipe {
-  0%, 100% {
+  0% {
     opacity: 1;
-
     transform:
       translate3d(-50%, -50%, 0)
       rotate(var(--hand-rotation));
@@ -222,18 +221,19 @@
 
   28% {
     opacity: 1;
-
     transform:
       translate3d(calc(-50% + 55px), calc(-50% - 65px), 0)
       rotate(0deg);
+
+    animation-timing-function:
+      cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  30% {
+  100% {
     opacity: 1;
-
     transform:
-      translate3d(calc(-50% + 52px), calc(-50% - 61px), 0)
-      rotate(-1deg);
+      translate3d(-50%, -50%, 0)
+      rotate(var(--hand-rotation));
   }
 }
 
