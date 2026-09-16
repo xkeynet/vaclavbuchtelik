@@ -2,7 +2,7 @@
 
 /* =========================================================
    VÁCLAV BUCHTELÍK — GALLERY SWIPE HAND INTRO
-   SMOKED OVERLAY + CINEMATIC HUMAN SWIPE GESTURE
+   SMOKED OVERLAY + CINEMATIC HUMAN WRIST SWIPE
    ========================================================= */
 
 (() => {
@@ -23,11 +23,19 @@
   const HAND_SRC = '/assets/swipe-ui.png';
 
   /*
-   * More natural resting angle.
-   * The hand itself points slightly to the left instead
-   * of standing vertically like a straight pointer.
+   * Natural resting angle.
+   * The hand is deliberately tilted left.
    */
-  const HAND_ROTATION = -28;
+  const HAND_ROTATION = -30;
+
+  /*
+   * Pivot near the wrist.
+   * The gesture therefore behaves like a wiper:
+   * the hand swings around its lower wrist area instead
+   * of travelling mechanically along a straight path.
+   */
+  const HAND_ORIGIN_X = 70;
+  const HAND_ORIGIN_Y = 90;
 
   let overlay = null;
   let stage = null;
@@ -88,15 +96,14 @@
       }
 
       const animation = element.animate(keyframes, options);
-
       animations.add(animation);
 
       let finished = false;
 
       const finish = () => {
         if (finished) return;
-        finished = true;
 
+        finished = true;
         animations.delete(animation);
         resolve();
       };
@@ -142,6 +149,8 @@
     hand.draggable = false;
     hand.setAttribute('aria-hidden', 'true');
 
+    hand.style.transformOrigin = `${HAND_ORIGIN_X}% ${HAND_ORIGIN_Y}%`;
+
     stage.appendChild(hand);
     overlay.appendChild(stage);
     gallery.appendChild(overlay);
@@ -162,6 +171,7 @@
   const setHandSettled = () => {
     if (!hand) return;
 
+    hand.style.transformOrigin = `${HAND_ORIGIN_X}% ${HAND_ORIGIN_Y}%`;
     hand.style.opacity = '1';
     hand.style.transform = settledTransform();
     hand.style.willChange = 'transform, opacity';
@@ -183,6 +193,7 @@
       'is-exiting'
     );
 
+    hand.style.transformOrigin = `${HAND_ORIGIN_X}% ${HAND_ORIGIN_Y}%`;
     hand.style.opacity = '0';
     hand.style.transform = enterTransform();
     hand.style.willChange = 'transform, opacity';
@@ -205,7 +216,7 @@
   /* =========================================================
      HAND ENTER
      RIGHT -> CENTER
-     SLOW CINEMATIC DECELERATION
+     LONG CINEMATIC DECELERATION
      ========================================================= */
 
   const enterHand = async id => {
@@ -228,20 +239,26 @@
         {
           opacity: 1,
           transform:
-            `translate3d(calc(50vw + 90px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+            `translate3d(calc(50vw + 110px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
           offset: 0.08
         },
         {
           opacity: 1,
           transform:
-            `translate3d(calc(-50% + 72px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
-          offset: 0.62
+            `translate3d(calc(-50% + 105px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.54
         },
         {
           opacity: 1,
           transform:
-            `translate3d(calc(-50% + 22px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
-          offset: 0.84
+            `translate3d(calc(-50% + 45px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.72
+        },
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 14px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.88
         },
         {
           opacity: 1,
@@ -251,7 +268,7 @@
       ],
       {
         duration: HAND_ENTER_MS,
-        easing: 'cubic-bezier(0.12, 0.82, 0.18, 1)',
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
         fill: 'forwards'
       },
       id
@@ -264,8 +281,16 @@
 
   /* =========================================================
      HUMAN SWIPE
-     WIPER ARC:
-     REST -> UP + RIGHT ARC -> SOFT RETURN ON SAME ARC
+     WRIST PIVOT / WIPER ARC
+
+     IMPORTANT:
+     The centre position stays essentially fixed.
+     The visible arc is generated mainly by rotation around
+     the wrist pivot — not by dragging the whole image
+     diagonally across the screen.
+
+     Motion:
+     REST -> tiny preload -> quick arc -> slow return
      ========================================================= */
 
   const swipeHand = async id => {
@@ -281,7 +306,7 @@
       hand,
       [
         /*
-         * RESTING POSITION
+         * REST
          */
         {
           opacity: 1,
@@ -291,127 +316,151 @@
         },
 
         /*
-         * Tiny preparation.
-         * Almost stationary before the flick begins.
+         * Almost imperceptible preload.
+         * Human hand prepares before the flick.
          */
         {
           opacity: 1,
           transform:
-            `translate3d(calc(-50% - 3px), calc(-50% + 7px), 0) rotate(${HAND_ROTATION - 1}deg)`,
-          offset: 0.14
+            `translate3d(calc(-50% - 1px), calc(-50% + 2px), 0) rotate(${HAND_ROTATION - 1}deg)`,
+          offset: 0.10
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% - 2px), calc(-50% + 3px), 0) rotate(${HAND_ROTATION - 2}deg)`,
+          offset: 0.16
         },
 
         /*
-         * Beginning of the circular trajectory.
-         * The hand starts travelling UP and RIGHT.
+         * FLICK BEGINS.
+         * Wrist stays almost stationary.
          */
         {
           opacity: 1,
           transform:
-            `translate3d(calc(-50% + 15px), calc(-50% - 24px), 0) rotate(${HAND_ROTATION + 3}deg)`,
-          offset: 0.24
-        },
-
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 42px), calc(-50% - 58px), 0) rotate(${HAND_ROTATION + 7}deg)`,
-          offset: 0.32
+            `translate3d(calc(-50% - 1px), calc(-50% + 1px), 0) rotate(${HAND_ROTATION + 3}deg)`,
+          offset: 0.21
         },
 
         /*
-         * Main flick.
-         * Horizontal displacement grows as the hand rises,
-         * producing the visible wiper / circular arc.
+         * FAST ARC.
          */
         {
           opacity: 1,
           transform:
-            `translate3d(calc(-50% + 78px), calc(-50% - 88px), 0) rotate(${HAND_ROTATION + 12}deg)`,
+            `translate3d(calc(-50% + 1px), calc(-50% - 2px), 0) rotate(${HAND_ROTATION + 10}deg)`,
+          offset: 0.26
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 3px), calc(-50% - 4px), 0) rotate(${HAND_ROTATION + 18}deg)`,
+          offset: 0.31
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 5px), calc(-50% - 6px), 0) rotate(${HAND_ROTATION + 25}deg)`,
+          offset: 0.35
+        },
+
+        /*
+         * END OF FLICK.
+         * The hand has swept through an arc around the wrist.
+         */
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 6px), calc(-50% - 7px), 0) rotate(${HAND_ROTATION + 31}deg)`,
           offset: 0.39
         },
 
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 116px), calc(-50% - 110px), 0) rotate(${HAND_ROTATION + 17}deg)`,
-          offset: 0.45
-        },
-
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 148px), calc(-50% - 120px), 0) rotate(${HAND_ROTATION + 21}deg)`,
-          offset: 0.50
-        },
-
         /*
-         * TOP-RIGHT END OF ARC
-         * Short natural deceleration.
+         * Tiny natural overshoot.
          */
         {
           opacity: 1,
           transform:
-            `translate3d(calc(-50% + 165px), calc(-50% - 122px), 0) rotate(${HAND_ROTATION + 23}deg)`,
-          offset: 0.54
+            `translate3d(calc(-50% + 6px), calc(-50% - 7px), 0) rotate(${HAND_ROTATION + 33}deg)`,
+          offset: 0.42
         },
 
         /*
-         * RETURN.
-         * Same curved trajectory backwards, deliberately
-         * slower than the upward flick.
+         * TOP SETTLE.
          */
         {
           opacity: 1,
           transform:
-            `translate3d(calc(-50% + 151px), calc(-50% - 120px), 0) rotate(${HAND_ROTATION + 21}deg)`,
-          offset: 0.60
-        },
-
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 125px), calc(-50% - 113px), 0) rotate(${HAND_ROTATION + 18}deg)`,
-          offset: 0.67
-        },
-
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 94px), calc(-50% - 97px), 0) rotate(${HAND_ROTATION + 14}deg)`,
-          offset: 0.74
-        },
-
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 64px), calc(-50% - 75px), 0) rotate(${HAND_ROTATION + 10}deg)`,
-          offset: 0.81
-        },
-
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 38px), calc(-50% - 49px), 0) rotate(${HAND_ROTATION + 6}deg)`,
-          offset: 0.87
-        },
-
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 17px), calc(-50% - 24px), 0) rotate(${HAND_ROTATION + 3}deg)`,
-          offset: 0.92
-        },
-
-        {
-          opacity: 1,
-          transform:
-            `translate3d(calc(-50% + 5px), calc(-50% - 8px), 0) rotate(${HAND_ROTATION + 1}deg)`,
-          offset: 0.96
+            `translate3d(calc(-50% + 6px), calc(-50% - 7px), 0) rotate(${HAND_ROTATION + 31}deg)`,
+          offset: 0.46
         },
 
         /*
-         * BACK TO EXACTLY THE SAME RESTING POSITION.
+         * SLOW HUMAN RETURN.
+         * Same arc backwards, substantially slower.
+         */
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 6px), calc(-50% - 7px), 0) rotate(${HAND_ROTATION + 29}deg)`,
+          offset: 0.52
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 5px), calc(-50% - 6px), 0) rotate(${HAND_ROTATION + 25}deg)`,
+          offset: 0.59
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 4px), calc(-50% - 5px), 0) rotate(${HAND_ROTATION + 21}deg)`,
+          offset: 0.66
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 3px), calc(-50% - 4px), 0) rotate(${HAND_ROTATION + 17}deg)`,
+          offset: 0.73
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 2px), calc(-50% - 3px), 0) rotate(${HAND_ROTATION + 13}deg)`,
+          offset: 0.79
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 1px), calc(-50% - 2px), 0) rotate(${HAND_ROTATION + 9}deg)`,
+          offset: 0.85
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 1px), calc(-50% - 1px), 0) rotate(${HAND_ROTATION + 6}deg)`,
+          offset: 0.90
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(-50%, -50%, 0) rotate(${HAND_ROTATION + 3}deg)`,
+          offset: 0.95
+        },
+
+        /*
+         * SOFT LANDING BACK AT REST.
          */
         {
           opacity: 1,
@@ -421,7 +470,7 @@
       ],
       {
         duration: HAND_SWIPE_MS,
-        easing: 'cubic-bezier(0.42, 0, 0.18, 1)',
+        easing: 'linear',
         fill: 'forwards'
       },
       id
@@ -457,14 +506,20 @@
         {
           opacity: 1,
           transform:
-            `translate3d(calc(-50% + 14px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
-          offset: 0.16
+            `translate3d(calc(-50% + 10px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.14
+        },
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 45px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.28
         },
         {
           opacity: 1,
           transform:
             `translate3d(calc(50vw + 100px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
-          offset: 0.86
+          offset: 0.88
         },
         {
           opacity: 0,
@@ -514,15 +569,16 @@
 
   const runSequence = async id => {
     /*
-     * First artwork remains completely unobstructed for
-     * three seconds after Gallery has opened.
+     * First artwork remains completely unobstructed
+     * for three seconds.
      */
     await wait(START_DELAY_MS, id);
 
     if (!isCurrentRun(id)) return;
 
     /*
-     * Only now does the smoked glass begin to appear.
+     * Smoked glass appears only after the initial
+     * artwork presentation.
      */
     overlay.classList.remove('is-hidden', 'is-exiting');
     overlay.classList.add('is-open');
@@ -533,8 +589,8 @@
     if (!isCurrentRun(id)) return;
 
     /*
-     * Hand travels slowly from outside the right edge
-     * and naturally decelerates into the centre.
+     * Hand enters from the right and decelerates
+     * smoothly into its resting position.
      */
     await enterHand(id);
 
@@ -567,7 +623,7 @@
     if (!isCurrentRun(id)) return;
 
     /*
-     * Hand leaves to the right.
+     * Hand returns to the right.
      */
     await exitHand(id);
 
@@ -598,11 +654,8 @@
     resetOverlay();
 
     /*
-     * Keep the overlay visually absent during the initial
-     * three-second artwork presentation.
-     *
-     * Pointer input is nevertheless captured immediately,
-     * so the introductory sequence cannot be interrupted.
+     * The first artwork remains visually clean during
+     * START_DELAY_MS, but interaction is locked immediately.
      */
     overlay.classList.remove('is-hidden');
     overlay.style.pointerEvents = 'auto';
