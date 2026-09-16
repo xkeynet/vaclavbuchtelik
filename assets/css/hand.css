@@ -200,7 +200,7 @@
 
 /* =========================================================
    HUMAN SWIPE
-   ONE CLEAN FLICK -> LONG SOFT RETURN
+   ONE CLEAN FLICK -> IMMEDIATE BOUNCE -> SOFT RETURN
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
@@ -226,6 +226,14 @@
     transform:
       translate3d(calc(-50% + 55px), calc(-50% - 65px), 0)
       rotate(0deg);
+  }
+
+  30% {
+    opacity: 1;
+
+    transform:
+      translate3d(calc(-50% + 52px), calc(-50% - 61px), 0)
+      rotate(-1deg);
   }
 }
 
