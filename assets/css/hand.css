@@ -132,7 +132,7 @@
     translate3d(calc(50vw + 180px), -50%, 0)
     rotate(var(--hand-rotation));
 
-  transform-origin: 50% 58%;
+  transform-origin: 70% 90%;
 
   object-fit: contain;
   object-position: center;
@@ -200,7 +200,7 @@
 
 /* =========================================================
    HUMAN SWIPE
-   ONE CLEAN FLICK -> IMMEDIATE BOUNCE -> SOFT RETURN
+   WRIST FLICK -> SOFT RETURN
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
@@ -212,28 +212,20 @@
 }
 
 @keyframes galleryHandSwipe {
-  0% {
+  0%, 100% {
     opacity: 1;
+
     transform:
       translate3d(-50%, -50%, 0)
       rotate(var(--hand-rotation));
   }
 
-  28% {
+  26% {
     opacity: 1;
-    transform:
-      translate3d(calc(-50% + 55px), calc(-50% - 65px), 0)
-      rotate(0deg);
 
-    animation-timing-function:
-      cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  100% {
-    opacity: 1;
     transform:
-      translate3d(-50%, -50%, 0)
-      rotate(var(--hand-rotation));
+      translate3d(calc(-50% + 8px), calc(-50% - 22px), 0)
+      rotate(12deg);
   }
 }
 
