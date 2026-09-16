@@ -222,8 +222,8 @@
     animation-timing-function: cubic-bezier(.15, .8, .2, 1);
   }
 
-  32% {
-    transform: translate3d(calc(-50% + 10px), calc(-50% - 120px), 0) rotate(-5deg);
+  34% {
+    transform: translate3d(calc(-50% + 10px), calc(-50% - 120px), 0) rotate(0deg);
     animation-timing-function: cubic-bezier(.16, .80, .20, 1);
   }
 
