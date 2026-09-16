@@ -199,7 +199,7 @@
 }
 
 /* =========================================================
-   HUMAN SWIPE (ARC: RIGHT-UP SWING & RETURN)
+   HUMAN SWIPE
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
@@ -218,28 +218,28 @@
       rotate(var(--hand-rotation));
   }
 
-  /* Mírný nadech/přítlak dolů/doleva před švihem */
-  18% {
+  /* Náběh do oblouku doprava nahoru, ruka se začíná vyrovnávat */
+  35% {
     transform:
-      translate3d(calc(-50% - 10px), calc(-50% + 12px), 0)
-      rotate(calc(var(--hand-rotation) - 2deg));
+      translate3d(calc(-50% + 25px), calc(-50% - 40px), 0)
+      rotate(calc(var(--hand-rotation) + 8deg));
   }
 
-  /* Hlavní švih po oblouku doprava nahoru */
-  55% {
+  /* Vrchol oblouku: ruka je maximálně nahoře a srovnaná do rovné/svislé polohy */
+  60% {
     transform:
-      translate3d(calc(-50% + 95px), calc(-50% - 110px), 0)
-      rotate(calc(var(--hand-rotation) + 12deg));
+      translate3d(calc(-50% + 42px), calc(-50% - 65px), 0)
+      rotate(0deg);
   }
 
-  /* Vrchol oblouku / nejdelší bod protažení */
-  72% {
+  /* Mírné podržení v narovnané poloze */
+  75% {
     transform:
-      translate3d(calc(-50% + 115px), calc(-50% - 125px), 0)
-      rotate(calc(var(--hand-rotation) + 15deg));
+      translate3d(calc(-50% + 35px), calc(-50% - 55px), 0)
+      rotate(0deg);
   }
 
-  /* Návrat zpátky do klidové pozice */
+  /* Návrat po oblouku zpátky a stočení do původního náklonu */
   100% {
     opacity: 1;
     transform:
