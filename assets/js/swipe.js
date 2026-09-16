@@ -27,7 +27,7 @@
     cinematicPower: 4.2,
     cinematicTailStrength: 0.16,
 
-    takeoverMinDistancePx: 2
+    takeoverMinDistancePx: 6
   };
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -392,11 +392,6 @@
         return false;
       }
 
-      /*
-       * Do not stop the cinematic motion on touchstart.
-       * The finger first proves that this is a vertical gesture.
-       * This prevents a simple tap from freezing the animation.
-       */
       takingOver = true;
       dragging = false;
       axis = null;
@@ -413,36 +408,49 @@
       return true;
     };
 
-    const activateTakeover = y => {
+    const activateTakeover = (x, y, dy) => {
       const direction = motionDirection;
 
-      /*
-       * Capture the exact rendered position before cancelling RAF.
-       */
       takeoverOrigin = dragY;
 
       cancelMotion();
 
       animating = false;
       motionDirection = 0;
+
+      if (!recycle(direction)) {
+        takingOver = false;
+        dragging = false;
+        axis = null;
+        return false;
+      }
+
+      prepareMotion();
+
+      takingOver = false;
       dragging = true;
+      axis = 'vertical';
 
-      /*
-       * The old card has already committed logically once the user
-       * starts another intentional swipe in the same direction.
-       * Finish its boundary atomically, recycle, then transfer the
-       * remaining finger movement to the new CURRENT.
-       */
-      if (!recycle(direction)) return false;
+      const transferredDistance = Math.sign(dy) * Math.max(
+        0,
+        Math.abs(dy) - config.takeoverMinDistancePx
+      );
 
-      startY = y;
+      startX = x;
+      startY = y - transferredDistance;
+
       lastY = y;
       lastTime = performance.now();
 
-      dragY = 0;
+      dragY = clamp(
+        transferredDistance,
+        -viewportHeight,
+        viewportHeight
+      );
+
       velocityY = 0;
 
-      prepareMotion();
+      renderTrack(dragY);
 
       return true;
     };
@@ -472,11 +480,6 @@
 
       const gestureDirection = dy < 0 ? 1 : -1;
 
-      /*
-       * Same-direction gesture = continuous swipe.
-       * Opposite direction does not destroy the running cinematic
-       * commit; the original motion is allowed to finish normally.
-       */
       if (
         gestureDirection !== motionDirection ||
         Math.abs(dy) < config.takeoverMinDistancePx
@@ -484,21 +487,7 @@
         return true;
       }
 
-      if (!activateTakeover(y)) return false;
-
-      /*
-       * Preserve the part of this gesture that already happened
-       * before takeover instead of throwing it away.
-       */
-      const transferredDistance =
-        Math.sign(dy) * Math.max(0, Math.abs(dy) - config.takeoverMinDistancePx);
-
-      startY = y - transferredDistance;
-      dragY = clamp(transferredDistance, -viewportHeight, viewportHeight);
-
-      renderTrack(dragY);
-
-      return true;
+      return activateTakeover(x, y, dy);
     };
 
     /* =========================================================
@@ -585,10 +574,6 @@
     const endGesture = cancelled => {
       if (destroyed || !enabled) return;
 
-      /*
-       * Finger was placed during cinematic motion but never took
-       * control. Leave the existing animation untouched.
-       */
       if (takingOver && animating) {
         takingOver = false;
         axis = null;
@@ -775,13 +760,9 @@
       current = nextLayers?.current || current;
       next = nextLayers?.next || next;
 
-      /*
-       * During recycle the swipe engine owns the motion state.
-       * Do not cancel an active takeover from inside onCommit().
-       */
       if (hasLayers()) {
         viewportHeight = getViewportHeight(viewport);
-        renderTrack(0);
+        renderTrack(dragY);
       }
     };
 
