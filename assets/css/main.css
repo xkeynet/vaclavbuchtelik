@@ -851,6 +851,10 @@
    ========================================================= */
 
 .main-menu__contact a {
+  display: block;
+
+  width: fit-content;
+
   color: var(--main-foreground);
 
   text-decoration: none;
@@ -858,17 +862,38 @@
   outline: none;
 
   -webkit-tap-highlight-color: transparent;
+
+  transition:
+    color 140ms ease-out,
+    text-shadow 180ms ease-out,
+    opacity 140ms ease-out;
 }
 
-.main-menu__contact a:visited,
-.main-menu__contact a:hover,
-.main-menu__contact a:active,
-.main-menu__contact a:focus {
+.main-menu__contact a:link,
+.main-menu__contact a:visited {
   color: var(--main-foreground);
 
   text-decoration: none;
+}
+
+.main-menu__contact a:hover,
+.main-menu__contact a:focus,
+.main-menu__contact a:focus-visible,
+.main-menu__contact a:active {
+  color: #fff7c2;
+
+  text-decoration: none;
+
+  text-shadow:
+    0 0 4px rgba(255, 244, 166, 0.95),
+    0 0 10px rgba(255, 226, 92, 0.72),
+    0 0 18px rgba(255, 211, 64, 0.42);
 
   outline: none;
+}
+
+.main-menu__contact a:active {
+  opacity: 0.82;
 }
 
 /* =========================================================
