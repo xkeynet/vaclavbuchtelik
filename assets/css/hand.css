@@ -224,7 +224,7 @@
     opacity: 1;
 
     transform:
-      translate3d(calc(-50% + 42px), calc(-50% - 65px), 0)
+      translate3d(calc(-50% + 55px), calc(-50% - 65px), 0)
       rotate(0deg);
   }
 }
