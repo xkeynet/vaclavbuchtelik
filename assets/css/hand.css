@@ -13,7 +13,7 @@
   --hand-enter-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
 
   --hand-swipe-duration: 1100ms;
-  --hand-swipe-easing: cubic-bezier(0.16, 0.8, 0.24, 1);
+  --hand-swipe-easing: linear;
 
   --hand-exit-duration: 1000ms;
   --hand-exit-easing: cubic-bezier(0.55, 0, 1, 0.45);
@@ -200,7 +200,7 @@
 
 /* =========================================================
    HUMAN SWIPE
-   ONE CLEAN FLICK -> SOFT RETURN
+   ONE CLEAN FLICK -> IMMEDIATE RETURN
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
