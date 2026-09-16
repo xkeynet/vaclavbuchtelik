@@ -27,7 +27,7 @@
     cinematicPower: 4.2,
     cinematicTailStrength: 0.16,
 
-    takeoverMinDistancePx: 6
+    takeoverMinDistancePx: 2
   };
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
