@@ -12,7 +12,7 @@
   const HAND_ENTER_MS = 1100;
   const HAND_SETTLE_MS = 650;
   const HAND_SWIPE_MS = 1050;
-  const BETWEEN_SWIPES_MS = 720;
+  const BETWEEN_SWIPES_MS = 1720;
   const AFTER_SWIPES_HOLD_MS = 520;
   const HAND_EXIT_MS = 1000;
 
