@@ -199,8 +199,8 @@
 }
 
 /* =========================================================
-   HUMAN SWIPE
-   WRIST FLICK -> SOFT RETURN
+   HUMAN SWIPE UP
+   SMALL LIFT + WRIST FLICK -> SOFT RETURN
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
@@ -212,38 +212,20 @@
 }
 
 @keyframes galleryHandSwipe {
-  0% {
+  0%, 100% {
+    opacity: 1;
+
     transform:
       translate3d(-50%, -50%, 0)
       rotate(var(--hand-rotation));
-    animation-timing-function: cubic-bezier(.42, 0, .58, 1);
   }
 
-  18% {
-    transform:
-      translate3d(-50%, calc(-50% - 7px), 0)
-      rotate(var(--hand-rotation));
-    animation-timing-function: cubic-bezier(.18, .72, .22, 1);
-  }
+  26% {
+    opacity: 1;
 
-  42% {
     transform:
-      translate3d(-50%, calc(-50% - 108px), 0)
-      rotate(-7deg);
-    animation-timing-function: cubic-bezier(.16, .76, .24, 1);
-  }
-
-  52% {
-    transform:
-      translate3d(-50%, calc(-50% - 116px), 0)
-      rotate(-7.5deg);
-    animation-timing-function: cubic-bezier(.22, .61, .36, 1);
-  }
-
-  100% {
-    transform:
-      translate3d(-50%, -50%, 0)
-      rotate(var(--hand-rotation));
+      translate3d(calc(-50% + 3px), calc(-50% - 34px), 0)
+      rotate(4deg);
   }
 }
 
