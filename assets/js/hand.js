@@ -2,25 +2,27 @@
 
 /* =========================================================
    VÁCLAV BUCHTELÍK — GALLERY SWIPE HAND INTRO
-   SMOKED OVERLAY + TWO HUMAN SWIPE GESTURES
+   SMOKED OVERLAY + CINEMATIC HUMAN SWIPE GESTURE
    ========================================================= */
 
 (() => {
-  const START_DELAY_MS = 260;
+  const START_DELAY_MS = 3000;
   const OVERLAY_FADE_IN_MS = 420;
 
-  const HAND_ENTER_MS = 1100;
-  const HAND_SETTLE_MS = 380;
+  const HAND_ENTER_MS = 1450;
+  const HAND_SETTLE_MS = 520;
 
-  const HAND_SWIPE_MS = 900;
-  const BETWEEN_SWIPES_MS = 520;
+  const HAND_SWIPE_MS = 1250;
+  const BETWEEN_SWIPES_MS = 620;
 
-  const AFTER_SWIPES_HOLD_MS = 320;
+  const AFTER_SWIPES_HOLD_MS = 420;
 
-  const HAND_EXIT_MS = 1000;
+  const HAND_EXIT_MS = 1200;
   const OVERLAY_FADE_OUT_MS = 420;
 
   const HAND_SRC = '/assets/swipe-ui.png';
+
+  const HAND_ROTATION = -18;
 
   let overlay = null;
   let stage = null;
@@ -30,6 +32,7 @@
   let runId = 0;
 
   const timers = new Set();
+  const animations = new Set();
 
   /* =========================================================
      HELPERS
@@ -57,9 +60,44 @@
     timers.clear();
   };
 
+  const cancelAnimations = () => {
+    animations.forEach(animation => {
+      try {
+        animation.cancel();
+      } catch (error) {}
+    });
+
+    animations.clear();
+  };
+
   const nextFrame = () =>
     new Promise(resolve => {
       requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+
+  const runAnimation = (element, keyframes, options, id) =>
+    new Promise(resolve => {
+      if (!element || !isCurrentRun(id)) {
+        resolve();
+        return;
+      }
+
+      const animation = element.animate(keyframes, options);
+
+      animations.add(animation);
+
+      let finished = false;
+
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+
+        animations.delete(animation);
+        resolve();
+      };
+
+      animation.addEventListener('finish', finish, { once: true });
+      animation.addEventListener('cancel', finish, { once: true });
     });
 
   /* =========================================================
@@ -107,11 +145,31 @@
   };
 
   /* =========================================================
+     HAND GEOMETRY
+     ========================================================= */
+
+  const settledTransform = () =>
+    `translate3d(-50%, -50%, 0) rotate(${HAND_ROTATION}deg)`;
+
+  const enterTransform = () =>
+    `translate3d(calc(50vw + 180px), -50%, 0) rotate(${HAND_ROTATION}deg)`;
+
+  const setHandSettled = () => {
+    if (!hand) return;
+
+    hand.style.opacity = '1';
+    hand.style.transform = settledTransform();
+    hand.style.willChange = 'transform, opacity';
+  };
+
+  /* =========================================================
      RESET
      ========================================================= */
 
   const resetHand = () => {
     if (!hand) return;
+
+    cancelAnimations();
 
     hand.classList.remove(
       'is-entering',
@@ -120,7 +178,9 @@
       'is-exiting'
     );
 
-    void hand.offsetWidth;
+    hand.style.opacity = '0';
+    hand.style.transform = enterTransform();
+    hand.style.willChange = 'transform, opacity';
   };
 
   const resetOverlay = () => {
@@ -139,6 +199,8 @@
 
   /* =========================================================
      HAND ENTER
+     RIGHT -> CENTER
+     LONG CINEMATIC DECELERATION
      ========================================================= */
 
   const enterHand = async id => {
@@ -146,59 +208,207 @@
 
     resetHand();
 
-    hand.classList.add('is-entering');
-
-    await wait(HAND_ENTER_MS, id);
+    await nextFrame();
 
     if (!isCurrentRun(id)) return;
 
-    hand.classList.remove('is-entering');
-    hand.classList.add('is-settled');
+    await runAnimation(
+      hand,
+      [
+        {
+          opacity: 0,
+          transform: enterTransform(),
+          offset: 0
+        },
+        {
+          opacity: 1,
+          offset: 0.08
+        },
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 24px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.78
+        },
+        {
+          opacity: 1,
+          transform: settledTransform(),
+          offset: 1
+        }
+      ],
+      {
+        duration: HAND_ENTER_MS,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        fill: 'forwards'
+      },
+      id
+    );
 
-    await nextFrame();
+    if (!isCurrentRun(id)) return;
+
+    setHandSettled();
   };
 
   /* =========================================================
-     SINGLE SWIPE
+     HUMAN SWIPE
+     CURVED PRELOAD -> FAST ARC -> SOFT RETURN
      ========================================================= */
 
   const swipeHand = async id => {
     if (!isCurrentRun(id) || !hand) return;
 
-    hand.classList.remove('is-swiping');
+    setHandSettled();
 
-    void hand.offsetWidth;
-
-    hand.classList.add('is-swiping');
-
-    await wait(HAND_SWIPE_MS, id);
+    await nextFrame();
 
     if (!isCurrentRun(id)) return;
 
-    hand.classList.remove('is-swiping');
-    hand.classList.add('is-settled');
+    await runAnimation(
+      hand,
+      [
+        {
+          opacity: 1,
+          transform:
+            `translate3d(-50%, -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0
+        },
 
-    await nextFrame();
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 5px), calc(-50% + 11px), 0) rotate(${HAND_ROTATION + 1}deg)`,
+          offset: 0.12
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 13px), calc(-50% + 25px), 0) rotate(${HAND_ROTATION + 3}deg)`,
+          offset: 0.25
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 8px), calc(-50% + 12px), 0) rotate(${HAND_ROTATION + 1}deg)`,
+          offset: 0.34
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% - 10px), calc(-50% - 35px), 0) rotate(${HAND_ROTATION - 2}deg)`,
+          offset: 0.45
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% - 30px), calc(-50% - 82px), 0) rotate(${HAND_ROTATION - 5}deg)`,
+          offset: 0.56
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% - 39px), calc(-50% - 104px), 0) rotate(${HAND_ROTATION - 6}deg)`,
+          offset: 0.63
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% - 31px), calc(-50% - 91px), 0) rotate(${HAND_ROTATION - 5}deg)`,
+          offset: 0.69
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% - 18px), calc(-50% - 58px), 0) rotate(${HAND_ROTATION - 3}deg)`,
+          offset: 0.76
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% - 6px), calc(-50% - 25px), 0) rotate(${HAND_ROTATION - 1}deg)`,
+          offset: 0.84
+        },
+
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 2px), calc(-50% - 6px), 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.92
+        },
+
+        {
+          opacity: 1,
+          transform: settledTransform(),
+          offset: 1
+        }
+      ],
+      {
+        duration: HAND_SWIPE_MS,
+        easing: 'cubic-bezier(0.37, 0, 0.2, 1)',
+        fill: 'forwards'
+      },
+      id
+    );
+
+    if (!isCurrentRun(id)) return;
+
+    setHandSettled();
   };
 
   /* =========================================================
      HAND EXIT
+     CENTER -> RIGHT
      ========================================================= */
 
   const exitHand = async id => {
     if (!isCurrentRun(id) || !hand) return;
 
-    hand.classList.remove(
-      'is-entering',
-      'is-swiping',
-      'is-settled'
+    setHandSettled();
+
+    await nextFrame();
+
+    if (!isCurrentRun(id)) return;
+
+    await runAnimation(
+      hand,
+      [
+        {
+          opacity: 1,
+          transform: settledTransform(),
+          offset: 0
+        },
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(-50% + 18px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.18
+        },
+        {
+          opacity: 1,
+          transform:
+            `translate3d(calc(50vw + 100px), -50%, 0) rotate(${HAND_ROTATION}deg)`,
+          offset: 0.86
+        },
+        {
+          opacity: 0,
+          transform: enterTransform(),
+          offset: 1
+        }
+      ],
+      {
+        duration: HAND_EXIT_MS,
+        easing: 'cubic-bezier(0.55, 0, 1, 0.45)',
+        fill: 'forwards'
+      },
+      id
     );
-
-    void hand.offsetWidth;
-
-    hand.classList.add('is-exiting');
-
-    await wait(HAND_EXIT_MS, id);
   };
 
   /* =========================================================
@@ -208,10 +418,6 @@
   const finishIntro = async id => {
     if (!isCurrentRun(id) || !overlay) return;
 
-    /*
-     * The hand has already travelled outside the viewport.
-     * Now remove the smoked glass.
-     */
     overlay.classList.add('is-exiting');
 
     await wait(OVERLAY_FADE_OUT_MS, id);
@@ -223,6 +429,7 @@
     overlay.classList.remove('is-open', 'is-exiting');
     overlay.classList.add('is-hidden');
     overlay.setAttribute('aria-hidden', 'true');
+    overlay.style.pointerEvents = '';
 
     resetHand();
 
@@ -237,15 +444,15 @@
 
   const runSequence = async id => {
     /*
-     * First artwork is already visible when
-     * vb:gallery-opened is dispatched.
+     * First artwork remains completely unobstructed for
+     * three seconds after Gallery has opened.
      */
     await wait(START_DELAY_MS, id);
 
     if (!isCurrentRun(id)) return;
 
     /*
-     * Smoke the already-visible artwork.
+     * Only now does the smoked glass begin to appear.
      */
     overlay.classList.remove('is-hidden', 'is-exiting');
     overlay.classList.add('is-open');
@@ -256,8 +463,8 @@
     if (!isCurrentRun(id)) return;
 
     /*
-     * Hand enters from the right and settles
-     * around the centre of the artwork.
+     * Hand travels from outside the right edge and
+     * decelerates naturally into the centre.
      */
     await enterHand(id);
 
@@ -290,15 +497,15 @@
     if (!isCurrentRun(id)) return;
 
     /*
-     * Hand returns to the right side and disappears.
+     * Hand leaves to the right.
      */
     await exitHand(id);
 
     if (!isCurrentRun(id)) return;
 
     /*
-     * Only after the hand is gone does the smoked
-     * overlay disappear and interaction return.
+     * Smoked glass disappears only after the hand
+     * has completely left the viewport.
      */
     await finishIntro(id);
   };
@@ -317,11 +524,15 @@
     const id = runId;
 
     clearTimers();
+    cancelAnimations();
     resetOverlay();
 
     /*
-     * Overlay exists immediately and owns pointer input.
-     * Its visual darkening starts shortly afterwards.
+     * Keep the overlay visually absent during the initial
+     * three-second artwork presentation.
+     *
+     * Pointer input is nevertheless captured immediately,
+     * so the introductory sequence cannot be interrupted.
      */
     overlay.classList.remove('is-hidden');
     overlay.style.pointerEvents = 'auto';
@@ -338,6 +549,7 @@
     active = false;
 
     clearTimers();
+    cancelAnimations();
 
     if (!overlay) return;
 
@@ -380,6 +592,7 @@
       active = false;
 
       clearTimers();
+      cancelAnimations();
 
       if (overlay) {
         overlay.remove();
