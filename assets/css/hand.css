@@ -199,8 +199,7 @@
 }
 
 /* =========================================================
-   HUMAN SWIPE
-   DOWNWARD PRELOAD -> UPWARD FLICK -> RETURN
+   HUMAN SWIPE (ARC: RIGHT-UP SWING & RETURN)
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
@@ -214,45 +213,35 @@
 @keyframes galleryHandSwipe {
   0% {
     opacity: 1;
-
     transform:
       translate3d(-50%, -50%, 0)
       rotate(var(--hand-rotation));
   }
 
+  /* Mírný nadech/přítlak dolů/doleva před švihem */
   18% {
     transform:
-      translate3d(-50%, calc(-50% + 18px), 0)
-      rotate(calc(var(--hand-rotation) + 2deg));
+      translate3d(calc(-50% - 10px), calc(-50% + 12px), 0)
+      rotate(calc(var(--hand-rotation) - 2deg));
   }
 
-  30% {
+  /* Hlavní švih po oblouku doprava nahoru */
+  55% {
     transform:
-      translate3d(-50%, calc(-50% + 24px), 0)
-      rotate(calc(var(--hand-rotation) + 3deg));
+      translate3d(calc(-50% + 95px), calc(-50% - 110px), 0)
+      rotate(calc(var(--hand-rotation) + 12deg));
   }
 
-  58% {
+  /* Vrchol oblouku / nejdelší bod protažení */
+  72% {
     transform:
-      translate3d(-50%, calc(-50% - 92px), 0)
-      rotate(calc(var(--hand-rotation) - 3deg));
+      translate3d(calc(-50% + 115px), calc(-50% - 125px), 0)
+      rotate(calc(var(--hand-rotation) + 15deg));
   }
 
-  68% {
-    transform:
-      translate3d(-50%, calc(-50% - 98px), 0)
-      rotate(calc(var(--hand-rotation) - 4deg));
-  }
-
-  84% {
-    transform:
-      translate3d(-50%, calc(-50% - 14px), 0)
-      rotate(calc(var(--hand-rotation) - 1deg));
-  }
-
+  /* Návrat zpátky do klidové pozice */
   100% {
     opacity: 1;
-
     transform:
       translate3d(-50%, -50%, 0)
       rotate(var(--hand-rotation));
