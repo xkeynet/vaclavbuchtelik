@@ -12,8 +12,8 @@
   --hand-enter-duration: 1100ms;
   --hand-enter-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
 
-  --hand-swipe-duration: 1050ms;
-  --hand-swipe-easing: linear;
+  --hand-swipe-duration: 1100ms;
+  --hand-swipe-easing: cubic-bezier(0.16, 0.8, 0.24, 1);
 
   --hand-exit-duration: 1000ms;
   --hand-exit-easing: cubic-bezier(0.55, 0, 1, 0.45);
@@ -200,7 +200,7 @@
 
 /* =========================================================
    HUMAN SWIPE
-   SOFT LIFT -> FLICK -> TWINCH SOFT RETURN
+   ONE CLEAN FLICK -> SOFT RETURN
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
@@ -212,41 +212,20 @@
 }
 
 @keyframes galleryHandSwipe {
-  0% {
+  0%, 100% {
     opacity: 1;
+
     transform:
       translate3d(-50%, -50%, 0)
       rotate(var(--hand-rotation));
-
-    animation-timing-function:
-      cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  18% {
+  32% {
     opacity: 1;
-    transform:
-      translate3d(calc(-50% + 8px), calc(-50% - 20px), 0)
-      rotate(calc(var(--hand-rotation) + 3deg));
 
-    animation-timing-function:
-      cubic-bezier(0.25, 0, 0.2, 1);
-  }
-
-  34% {
-    opacity: 1;
     transform:
       translate3d(calc(-50% + 42px), calc(-50% - 65px), 0)
       rotate(0deg);
-
-    animation-timing-function:
-      cubic-bezier(0.14, 0.92, 0.18, 1);
-  }
-
-  100% {
-    opacity: 1;
-    transform:
-      translate3d(-50%, -50%, 0)
-      rotate(var(--hand-rotation));
   }
 }
 
