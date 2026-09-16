@@ -1112,3 +1112,11 @@
   font-size: 18px;
   font-weight: 700;
 }
+
+/* =========================================================
+   MENU SUBCONTENT — 30PX INDENT
+   ========================================================= */
+
+.main-menu__panel-inner > * {
+  transform: translate3d(40px, 0, 0);
+}
