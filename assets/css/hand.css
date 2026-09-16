@@ -228,7 +228,7 @@
 
   34% {
     transform:
-      translate3d(-50%, calc(-50% - 70px), 0)
+      translate3d(-50%, calc(-50% - 100px), 0)
       rotate(-8deg);
     animation-timing-function: cubic-bezier(.12, .65, .22, 1);
   }
