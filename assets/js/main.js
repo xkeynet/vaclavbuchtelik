@@ -248,7 +248,19 @@
 
   const createContactContent = () => {
     const contact = createElement('div', 'main-menu__text main-menu__contact');
-    contact.textContent = 'Contact information will be added here.';
+
+    const name = createElement('div', 'main-menu__contact-name');
+    name.textContent = 'Václav Buchtelík';
+
+    const email = createElement('a', 'main-menu__contact-email');
+    email.href = 'mailto:art@vaclavbuchtelik.com';
+    email.textContent = 'art@vaclavbuchtelik.com';
+
+    const phone = createElement('a', 'main-menu__contact-phone');
+    phone.href = 'tel:+420737615992';
+    phone.textContent = '+420 737 615 992';
+
+    contact.append(name, email, phone);
     return contact;
   };
 
