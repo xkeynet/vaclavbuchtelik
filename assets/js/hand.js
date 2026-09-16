@@ -9,12 +9,12 @@
   const START_DELAY_MS = 3000;
   const OVERLAY_FADE_MS = 420;
 
-  const HAND_ENTER_MS = 1900;
+  const HAND_ENTER_MS = 1100;
   const HAND_SETTLE_MS = 650;
-  const HAND_SWIPE_MS = 3000;
+  const HAND_SWIPE_MS = 1050;
   const BETWEEN_SWIPES_MS = 720;
   const AFTER_SWIPES_HOLD_MS = 520;
-  const HAND_EXIT_MS = 1500;
+  const HAND_EXIT_MS = 1000;
 
   const HAND_SRC = '/assets/swipe-ui.png';
 
@@ -156,7 +156,7 @@
   /* =========================================================
      SWIPE
      CSS: .gallery-hand__hand.is-swiping
-     @keyframes humanSwipeArc
+     @keyframes galleryHandSwipe
      ========================================================= */
 
   const swipe = async id => {
@@ -293,6 +293,15 @@
     overlay.classList.add('is-hidden');
     overlay.setAttribute('aria-hidden', 'true');
     overlay.style.pointerEvents = '';
+
+    if (hand) {
+      hand.classList.remove(
+        'is-entering',
+        'is-settled',
+        'is-swiping',
+        'is-exiting'
+      );
+    }
   };
 
   /* =========================================================
