@@ -2,6 +2,7 @@
 
 /* =========================================================
    VÁCLAV BUCHTELÍK — GALLERY SWIPE HAND INTRO
+   LOGIC / TIMING ONLY — ALL MOTION LIVES IN hand.css
    ========================================================= */
 
 (() => {
@@ -16,8 +17,6 @@
   const HAND_EXIT_MS = 1500;
 
   const HAND_SRC = '/assets/swipe-ui.png';
-  const HAND_ROTATION = -30;
-  const HAND_ORIGIN = '70% 90%';
 
   let overlay = null;
   let hand = null;
@@ -25,7 +24,6 @@
   let runId = 0;
 
   const timers = new Set();
-  const animations = new Set();
 
   /* =========================================================
      HELPERS
@@ -36,7 +34,7 @@
   const wait = (ms, id) => new Promise(resolve => {
     if (!isCurrent(id)) return resolve();
 
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       timers.delete(timer);
       resolve();
     }, ms);
@@ -45,33 +43,27 @@
   });
 
   const nextFrame = () =>
-    new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    new Promise(resolve =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(resolve)
+      )
+    );
 
-  const clearAll = () => {
-    timers.forEach(clearTimeout);
+  const clearTimers = () => {
+    timers.forEach(timer => window.clearTimeout(timer));
     timers.clear();
-
-    animations.forEach(animation => {
-      try { animation.cancel(); } catch {}
-    });
-
-    animations.clear();
   };
 
-  const animate = (keyframes, options, id) => new Promise(resolve => {
-    if (!hand || !isCurrent(id)) return resolve();
+  const restartClass = async className => {
+    if (!hand) return;
 
-    const animation = hand.animate(keyframes, options);
-    animations.add(animation);
+    hand.classList.remove(className);
+    void hand.offsetWidth;
 
-    const done = () => {
-      animations.delete(animation);
-      resolve();
-    };
+    await nextFrame();
 
-    animation.addEventListener('finish', done, { once: true });
-    animation.addEventListener('cancel', done, { once: true });
-  });
+    hand.classList.add(className);
+  };
 
   /* =========================================================
      DOM
@@ -82,7 +74,10 @@
     if (!gallery) return false;
 
     if (overlay) {
-      if (overlay.parentElement !== gallery) gallery.appendChild(overlay);
+      if (overlay.parentElement !== gallery) {
+        gallery.appendChild(overlay);
+      }
+
       return true;
     }
 
@@ -100,7 +95,6 @@
     hand.decoding = 'async';
     hand.draggable = false;
     hand.setAttribute('aria-hidden', 'true');
-    hand.style.transformOrigin = HAND_ORIGIN;
 
     stage.appendChild(hand);
     overlay.appendChild(stage);
@@ -110,130 +104,99 @@
   };
 
   /* =========================================================
-     POSITIONS
+     RESET
      ========================================================= */
 
-  const REST = `translate3d(-50%, -50%, 0) rotate(${HAND_ROTATION}deg)`;
-  const OUTSIDE = `translate3d(calc(50vw + 180px), -50%, 0) rotate(${HAND_ROTATION}deg)`;
-
-  const settle = () => {
+  const resetHand = () => {
     if (!hand) return;
 
-    hand.style.opacity = '1';
-    hand.style.transform = REST;
-    hand.style.transformOrigin = HAND_ORIGIN;
+    hand.classList.remove(
+      'is-entering',
+      'is-settled',
+      'is-swiping',
+      'is-exiting'
+    );
   };
 
-  const reset = () => {
-    if (!overlay || !hand) return;
+  const resetOverlay = () => {
+    if (!overlay) return;
 
-    overlay.classList.remove('is-open', 'is-exiting');
+    overlay.classList.remove(
+      'is-open',
+      'is-exiting'
+    );
+
     overlay.setAttribute('aria-hidden', 'true');
 
-    hand.style.opacity = '0';
-    hand.style.transform = OUTSIDE;
-    hand.style.transformOrigin = HAND_ORIGIN;
+    resetHand();
   };
 
   /* =========================================================
      ENTER
-     RIGHT -> CENTER
+     CSS: .gallery-hand__hand.is-entering
      ========================================================= */
 
   const enter = async id => {
-    hand.style.opacity = '0';
-    hand.style.transform = OUTSIDE;
+    if (!hand || !isCurrent(id)) return;
+
+    resetHand();
 
     await nextFrame();
     if (!isCurrent(id)) return;
 
-    await animate(
-      [
-        { opacity: 0, transform: OUTSIDE },
-        { opacity: 1, transform: `translate3d(calc(-50% + 55px), -50%, 0) rotate(${HAND_ROTATION}deg)` },
-        { opacity: 1, transform: REST }
-      ],
-      {
-        duration: HAND_ENTER_MS,
-        easing: 'cubic-bezier(.16,1,.3,1)',
-        fill: 'forwards'
-      },
-      id
-    );
+    hand.classList.add('is-entering');
 
-    if (isCurrent(id)) settle();
+    await wait(HAND_ENTER_MS, id);
+    if (!isCurrent(id)) return;
+
+    hand.classList.remove('is-entering');
+    hand.classList.add('is-settled');
   };
 
   /* =========================================================
      SWIPE
-     REST -> JEMNĚ NAHORU -> ŠVIH DOPRAVA OBLOUKEM
-     -> PLYNULÝ NÁVRAT STEJNOU TRAJEKTORIÍ
+     CSS: .gallery-hand__hand.is-swiping
+     @keyframes humanSwipeArc
      ========================================================= */
 
   const swipe = async id => {
-    settle();
+    if (!hand || !isCurrent(id)) return;
 
-    await nextFrame();
+    hand.classList.remove('is-entering', 'is-exiting');
+    hand.classList.add('is-settled');
+
+    await restartClass('is-swiping');
     if (!isCurrent(id)) return;
 
-    await animate(
-      [
-        {
-          transform: REST,
-          offset: 0
-        },
-        {
-          transform: `translate3d(-50%, calc(-50% - 28px), 0) rotate(${HAND_ROTATION - 2}deg)`,
-          offset: 0.20
-        },
-        {
-          transform: `translate3d(calc(-50% + 135px), calc(-50% - 65px), 0) rotate(${HAND_ROTATION + 13}deg)`,
-          offset: 0.55
-        },
-        {
-          transform: `translate3d(-50%, calc(-50% - 28px), 0) rotate(${HAND_ROTATION - 2}deg)`,
-          offset: 0.80
-        },
-        {
-          transform: REST,
-          offset: 1
-        }
-      ],
-      {
-        duration: HAND_SWIPE_MS,
-        easing: 'cubic-bezier(.45,0,.2,1)',
-        fill: 'forwards'
-      },
-      id
-    );
+    await wait(HAND_SWIPE_MS, id);
+    if (!isCurrent(id)) return;
 
-    if (isCurrent(id)) settle();
+    hand.classList.remove('is-swiping');
+    hand.classList.add('is-settled');
   };
 
   /* =========================================================
      EXIT
-     CENTER -> RIGHT
+     CSS: .gallery-hand__hand.is-exiting
      ========================================================= */
 
   const exit = async id => {
-    settle();
+    if (!hand || !isCurrent(id)) return;
+
+    hand.classList.remove(
+      'is-entering',
+      'is-swiping'
+    );
+
+    hand.classList.add('is-settled');
 
     await nextFrame();
     if (!isCurrent(id)) return;
 
-    await animate(
-      [
-        { opacity: 1, transform: REST },
-        { opacity: 1, transform: `translate3d(calc(-50% + 50px), -50%, 0) rotate(${HAND_ROTATION}deg)` },
-        { opacity: 0, transform: OUTSIDE }
-      ],
-      {
-        duration: HAND_EXIT_MS,
-        easing: 'cubic-bezier(.55,0,1,.45)',
-        fill: 'forwards'
-      },
-      id
-    );
+    hand.classList.remove('is-settled');
+    hand.classList.add('is-exiting');
+
+    await wait(HAND_EXIT_MS, id);
   };
 
   /* =========================================================
@@ -251,13 +214,22 @@
     if (!isCurrent(id)) return;
 
     await enter(id);
+    if (!isCurrent(id)) return;
+
     await wait(HAND_SETTLE_MS, id);
+    if (!isCurrent(id)) return;
 
     await swipe(id);
+    if (!isCurrent(id)) return;
+
     await wait(BETWEEN_SWIPES_MS, id);
+    if (!isCurrent(id)) return;
 
     await swipe(id);
+    if (!isCurrent(id)) return;
+
     await wait(AFTER_SWIPES_HOLD_MS, id);
+    if (!isCurrent(id)) return;
 
     await exit(id);
     if (!isCurrent(id)) return;
@@ -269,19 +241,24 @@
 
     active = false;
 
-    overlay.classList.remove('is-open', 'is-exiting');
+    overlay.classList.remove(
+      'is-open',
+      'is-exiting'
+    );
+
     overlay.classList.add('is-hidden');
     overlay.setAttribute('aria-hidden', 'true');
     overlay.style.pointerEvents = '';
 
-    hand.style.opacity = '0';
-    hand.style.transform = OUTSIDE;
+    resetHand();
 
-    window.dispatchEvent(new CustomEvent('vb:gallery-hand-finished'));
+    window.dispatchEvent(
+      new CustomEvent('vb:gallery-hand-finished')
+    );
   };
 
   /* =========================================================
-     OPEN / CLOSE
+     OPEN
      ========================================================= */
 
   const open = () => {
@@ -290,8 +267,8 @@
     active = true;
     const id = ++runId;
 
-    clearAll();
-    reset();
+    clearTimers();
+    resetOverlay();
 
     overlay.classList.remove('is-hidden');
     overlay.style.pointerEvents = 'auto';
@@ -299,27 +276,27 @@
     run(id);
   };
 
+  /* =========================================================
+     CLOSE
+     ========================================================= */
+
   const close = () => {
     active = false;
     runId++;
 
-    clearAll();
+    clearTimers();
 
     if (!overlay) return;
 
-    overlay.classList.remove('is-open', 'is-exiting');
+    resetOverlay();
+
     overlay.classList.add('is-hidden');
     overlay.setAttribute('aria-hidden', 'true');
     overlay.style.pointerEvents = '';
-
-    if (hand) {
-      hand.style.opacity = '0';
-      hand.style.transform = OUTSIDE;
-    }
   };
 
   /* =========================================================
-     EVENTS / API / CLEANUP
+     EVENTS / API
      ========================================================= */
 
   window.addEventListener('vb:gallery-opened', open);
@@ -331,11 +308,16 @@
     isActive: () => active
   });
 
+  /* =========================================================
+     CLEANUP
+     ========================================================= */
+
   window.addEventListener('pagehide', () => {
     active = false;
     runId++;
 
-    clearAll();
+    clearTimers();
+
     overlay?.remove();
 
     overlay = null;
