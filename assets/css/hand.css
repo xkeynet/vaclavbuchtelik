@@ -200,7 +200,7 @@
 
 /* =========================================================
    HUMAN SWIPE
-   ONE CLEAN FLICK -> SOFT RETURN
+   SLOW LIFT -> QUICK FLICK -> SOFT RETURN
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
@@ -220,6 +220,16 @@
       rotate(var(--hand-rotation));
   }
 
+  /* První polovina fyzické dráhy — pomalejší náběh */
+  22% {
+    opacity: 1;
+
+    transform:
+      translate3d(calc(-50% + 27px), calc(-50% - 32px), 0)
+      rotate(-9deg);
+  }
+
+  /* Druhá polovina — krátký rychlý švih */
   32% {
     opacity: 1;
 
