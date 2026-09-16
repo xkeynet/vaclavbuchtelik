@@ -216,21 +216,28 @@
     transform:
       translate3d(-50%, -50%, 0)
       rotate(var(--hand-rotation));
-    animation-timing-function: cubic-bezier(.55, 0, .85, .45);
+    animation-timing-function: cubic-bezier(.42, 0, .58, 1);
   }
 
-  22% {
+  18% {
     transform:
-      translate3d(-50%, calc(-50% - 12px), 0)
+      translate3d(-50%, calc(-50% - 7px), 0)
       rotate(var(--hand-rotation));
-    animation-timing-function: cubic-bezier(.15, .8, .2, 1);
+    animation-timing-function: cubic-bezier(.18, .72, .22, 1);
   }
 
-  34% {
+  42% {
     transform:
-      translate3d(-50%, calc(-50% - 100px), 0)
-      rotate(-8deg);
-    animation-timing-function: cubic-bezier(.12, .65, .22, 1);
+      translate3d(-50%, calc(-50% - 108px), 0)
+      rotate(-7deg);
+    animation-timing-function: cubic-bezier(.16, .76, .24, 1);
+  }
+
+  52% {
+    transform:
+      translate3d(-50%, calc(-50% - 116px), 0)
+      rotate(-7.5deg);
+    animation-timing-function: cubic-bezier(.22, .61, .36, 1);
   }
 
   100% {
