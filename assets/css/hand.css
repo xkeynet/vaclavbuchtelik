@@ -12,7 +12,7 @@
   --hand-enter-duration: 1100ms;
   --hand-enter-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
 
-  --hand-swipe-duration: 900ms;
+  --hand-swipe-duration: 1050ms;
   --hand-swipe-easing: linear;
 
   --hand-exit-duration: 1000ms;
@@ -200,7 +200,7 @@
 
 /* =========================================================
    HUMAN SWIPE
-   SOFT LIFT -> QUICK FLICK -> LONG SOFT RETURN
+   SOFT LIFT -> FLICK -> TWINCH SOFT RETURN
    ========================================================= */
 
 .gallery-hand__hand.is-swiping {
@@ -217,27 +217,29 @@
     transform:
       translate3d(-50%, -50%, 0)
       rotate(var(--hand-rotation));
+
+    animation-timing-function:
+      cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  16% {
+  18% {
     opacity: 1;
     transform:
       translate3d(calc(-50% + 8px), calc(-50% - 20px), 0)
       rotate(calc(var(--hand-rotation) + 3deg));
+
+    animation-timing-function:
+      cubic-bezier(0.25, 0, 0.2, 1);
   }
 
-  28% {
+  34% {
     opacity: 1;
     transform:
       translate3d(calc(-50% + 42px), calc(-50% - 65px), 0)
       rotate(0deg);
-  }
 
-  52% {
-    opacity: 1;
-    transform:
-      translate3d(calc(-50% + 16px), calc(-50% - 28px), 0)
-      rotate(calc(var(--hand-rotation) + 6deg));
+    animation-timing-function:
+      cubic-bezier(0.14, 0.92, 0.18, 1);
   }
 
   100% {
