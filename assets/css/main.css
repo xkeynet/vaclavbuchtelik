@@ -413,7 +413,7 @@
 }
 
 /* =========================================================
-   SABER
+   SABER — WARM NEON GLOW
    ========================================================= */
 
 .main-menu__saber {
@@ -425,9 +425,15 @@
   width: var(--saber-width);
   height: var(--saber-height);
 
-  background: var(--main-foreground);
+  background: #fff9cf;
 
-  border-radius: 2px;
+  border-radius: 3px;
+
+  box-shadow:
+    0 0 3px rgba(255, 255, 255, 0.95),
+    0 0 7px rgba(255, 238, 145, 0.90),
+    0 0 13px rgba(255, 220, 70, 0.62),
+    0 0 22px rgba(255, 205, 35, 0.30);
 
   transform:
     translate3d(
