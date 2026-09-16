@@ -218,28 +218,21 @@
       rotate(var(--hand-rotation));
   }
 
-  /* Náběh do oblouku doprava nahoru, ruka se začíná vyrovnávat */
+  /* Plynulý náběh do oblouku doprava nahoru */
   35% {
     transform:
       translate3d(calc(-50% + 25px), calc(-50% - 40px), 0)
       rotate(calc(var(--hand-rotation) + 8deg));
   }
 
-  /* Vrchol oblouku: ruka je maximálně nahoře a srovnaná do rovné/svislé polohy */
+  /* Vrchol oblouku */
   60% {
     transform:
       translate3d(calc(-50% + 42px), calc(-50% - 65px), 0)
       rotate(0deg);
   }
 
-  /* Mírné podržení v narovnané poloze */
-  75% {
-    transform:
-      translate3d(calc(-50% + 35px), calc(-50% - 55px), 0)
-      rotate(0deg);
-  }
-
-  /* Návrat po oblouku zpátky a stočení do původního náklonu */
+  /* Plynulý návrat stejným obloukem */
   100% {
     opacity: 1;
     transform:
