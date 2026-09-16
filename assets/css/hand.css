@@ -12,7 +12,7 @@
   --hand-enter-duration: 1100ms;
   --hand-enter-easing: cubic-bezier(0.14, 0.92, 0.18, 1);
 
-  --hand-swipe-duration: 1100ms;
+  --hand-swipe-duration: 1600ms;
   --hand-swipe-easing: cubic-bezier(0.22, 0.7, 0.25, 1);
 
   --hand-exit-duration: 1000ms;
