@@ -224,7 +224,7 @@
 
   34% {
     transform: translate3d(calc(-50% + 10px), calc(-50% - 120px), 0) rotate(-5deg);
-    animation-timing-function: cubic-bezier(.12, .65, .22, 1);
+    animation-timing-function: cubic-bezier(.16, .72, .28, 1);
   }
 
   100% {
