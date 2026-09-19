@@ -1,97 +1,110 @@
-'use strict';
+// /assets/js/swipe.js - Reels
+(function () {
+  'use strict';
 
-/* =========================================================
-   VÁCLAV BUCHTELÍK — SWIPE ENGINE
-   PREVIOUS + CURRENT + NEXT
-   INTERRUPTIBLE CINEMATIC MOTION
-   ========================================================= */
+  function initTikbooSwipe(options) {
+    const {
+      refs,
+      state,
+      playlist,
+      vh,
+      normalizeIndex,
+      tryPlay,
+      clearAuto,
+      stopProg,
+      bindAutoAdvanceForCurrent,
+      syncSoundUI,
+      showPlayOverlay,
+      setLayerContent,
+      ensureSoundOn,
+      isInteractiveTarget
+    } = options;
 
-(() => {
-  const DEFAULTS = {
-    axisLockPx: 4,
+    /* =========================================================
+       VÁCLAV BUCHTELÍK — SWIPE ENGINE
+       PREVIOUS + CURRENT + NEXT
+       INTERRUPTIBLE CINEMATIC MOTION
+       VIDEO ADAPTER FOR TIKBOO
+       ========================================================= */
 
-    commitDistanceRatio: 0.10,
-    commitMinDistancePx: 28,
-    flickMinDistancePx: 10,
-    flickVelocityPxMs: 0.20,
-    velocitySmoothing: 0.38,
+    const DEFAULTS = {
+      axisLockPx: 4,
 
-    commitMinDurationMs: 420,
-    commitMaxDurationMs: 680,
-    commitDistanceDurationMs: 560,
-    commitVelocityInfluence: 0.18,
+      commitDistanceRatio: 0.10,
+      commitMinDistancePx: 28,
+      flickMinDistancePx: 10,
+      flickVelocityPxMs: 0.20,
+      velocitySmoothing: 0.38,
 
-    snapMinDurationMs: 260,
-    snapMaxDurationMs: 420,
+      commitMinDurationMs: 420,
+      commitMaxDurationMs: 680,
+      commitDistanceDurationMs: 560,
+      commitVelocityInfluence: 0.18,
 
-    cinematicPower: 4.2,
-    cinematicTailStrength: 0.16,
+      snapMinDurationMs: 260,
+      snapMaxDurationMs: 420,
 
-    takeoverMinDistancePx: 6
-  };
+      cinematicPower: 4.2,
+      cinematicTailStrength: 0.16,
 
-  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  const isDirection = direction => direction === 1 || direction === -1;
-
-  const getViewportHeight = viewport => Math.max(
-    1,
-    viewport?.clientHeight || 0,
-    window.visualViewport?.height || 0,
-    window.innerHeight || 0,
-    document.documentElement.clientHeight || 0
-  );
-
-  /* =========================================================
-     EASING
-     ========================================================= */
-
-  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
-
-  const createCinematicEase = (power, tailStrength) => {
-    const p = Math.max(2, power);
-    const tail = clamp(tailStrength, 0, 0.4);
-
-    return t => {
-      const base = 1 - Math.pow(1 - t, p);
-      const tailShape = Math.sin(Math.PI * t) * (1 - t);
-      return clamp(base - tailShape * tail, 0, 1);
+      takeoverMinDistancePx: 6
     };
-  };
 
-  /* =========================================================
-     CREATE
-     ========================================================= */
+    const config = { ...DEFAULTS };
 
-  const create = options => {
-    if (!options?.viewport) throw new Error('[VB Swipe] viewport is required.');
+    const clamp = (value, min, max) =>
+      Math.max(min, Math.min(max, value));
 
-    const viewport = options.viewport;
-    const exclude = typeof options.exclude === 'string' ? options.exclude : '';
-    const onCommit = typeof options.onCommit === 'function' ? options.onCommit : null;
-    const config = { ...DEFAULTS, ...(options.config || {}) };
+    const isDirection = direction =>
+      direction === 1 || direction === -1;
+
+    const getViewportHeight = () =>
+      Math.max(
+        1,
+        typeof vh === 'function' ? vh() : 0,
+        window.visualViewport?.height || 0,
+        window.innerHeight || 0,
+        document.documentElement.clientHeight || 0
+      );
+
+    /* =========================================================
+       EASING
+       ========================================================= */
+
+    const easeOutCubic = t =>
+      1 - Math.pow(1 - t, 3);
+
+    const createCinematicEase = (power, tailStrength) => {
+      const p = Math.max(2, power);
+      const tail = clamp(tailStrength, 0, 0.4);
+
+      return t => {
+        const base = 1 - Math.pow(1 - t, p);
+        const tailShape =
+          Math.sin(Math.PI * t) * (1 - t);
+
+        return clamp(
+          base - tailShape * tail,
+          0,
+          1
+        );
+      };
+    };
 
     const cinematicEase = createCinematicEase(
       config.cinematicPower,
       config.cinematicTailStrength
     );
 
-    let previous = options.layers?.previous || null;
-    let current = options.layers?.current || null;
-    let next = options.layers?.next || null;
-
     /* =========================================================
        STATE
        ========================================================= */
-
-    let enabled = false;
-    let destroyed = false;
 
     let dragging = false;
     let animating = false;
     let takingOver = false;
 
     let axis = null;
-    let pointerId = null;
 
     let startX = 0;
     let startY = 0;
@@ -108,30 +121,141 @@
     let motionDirection = 0;
     let takeoverOrigin = 0;
 
+    let nextLoadedIndex = null;
+    let prevLoadedIndex = null;
+
+    let touchBlocked = false;
+    let swipeSoundUnlocked = false;
+
     /* =========================================================
        LAYERS
        ========================================================= */
 
-    const layers = () => [previous, current, next].filter(Boolean);
-    const hasLayers = () => Boolean(previous && current && next);
+    const layers = () => [
+      refs.layerPrev,
+      refs.layerCurrent,
+      refs.layerNext
+    ].filter(Boolean);
+
+    const hasLayers = () =>
+      Boolean(
+        refs.layerPrev &&
+        refs.layerCurrent &&
+        refs.layerNext
+      );
 
     const setTransform = (layer, y) => {
       if (!layer) return;
-      layer.style.transform = `translate3d(0,${y.toFixed(3)}px,0)`;
+
+      layer.style.transform =
+        `translate3d(0,${y.toFixed(3)}px,0)`;
     };
 
     const prepareLayers = active => {
       layers().forEach(layer => {
         layer.style.transition = 'none';
-        layer.style.willChange = active ? 'transform' : 'auto';
+        layer.style.willChange =
+          active ? 'transform' : 'auto';
       });
     };
 
     const renderTrack = offset => {
-      setTransform(previous, -viewportHeight + offset);
-      setTransform(current, offset);
-      setTransform(next, viewportHeight + offset);
+      setTransform(
+        refs.layerPrev,
+        -viewportHeight + offset
+      );
+
+      setTransform(
+        refs.layerCurrent,
+        offset
+      );
+
+      setTransform(
+        refs.layerNext,
+        viewportHeight + offset
+      );
     };
+
+    /* =========================================================
+       VIDEO PREPARATION
+       ========================================================= */
+
+    function prewarmVideo(videoEl, item) {
+      if (
+        !videoEl ||
+        !item ||
+        item.type !== 'video'
+      ) {
+        return;
+      }
+
+      videoEl.playsInline = true;
+      videoEl.setAttribute('playsinline', '');
+      videoEl.setAttribute(
+        'webkit-playsinline',
+        ''
+      );
+
+      if (videoEl !== refs.videoCurrent) {
+        videoEl.muted = true;
+
+        try {
+          if (videoEl.readyState === 0) {
+            videoEl.load();
+          }
+        } catch (e) {}
+      }
+    }
+
+    function prepareForwardLayer() {
+      const targetIndex =
+        normalizeIndex(state.index + 1);
+
+      if (nextLoadedIndex !== targetIndex) {
+        setLayerContent(
+          refs.layerNext,
+          playlist[targetIndex],
+          true
+        );
+
+        nextLoadedIndex = targetIndex;
+
+        prewarmVideo(
+          refs.videoNext,
+          playlist[targetIndex]
+        );
+      }
+    }
+
+    function prepareBackwardLayer() {
+      const targetIndex =
+        normalizeIndex(state.index - 1);
+
+      if (prevLoadedIndex !== targetIndex) {
+        setLayerContent(
+          refs.layerPrev,
+          playlist[targetIndex],
+          true
+        );
+
+        prevLoadedIndex = targetIndex;
+
+        prewarmVideo(
+          refs.videoPrev,
+          playlist[targetIndex]
+        );
+      }
+    }
+
+    function warmForwardNext() {
+      if (animating) return;
+      prepareForwardLayer();
+    }
+
+    function warmBackwardNext() {
+      if (animating) return;
+      prepareBackwardLayer();
+    }
 
     /* =========================================================
        MOTION
@@ -158,30 +282,28 @@
 
       velocityY = 0;
       takeoverOrigin = 0;
+
+      touchBlocked = false;
+      swipeSoundUnlocked = false;
     };
 
-    const resetPointer = () => {
-      pointerId = null;
-    };
-
-    const resetGeometry = () => {
-      if (destroyed || !hasLayers()) return;
+    function resetTransformsNoAnim() {
+      if (!hasLayers()) return;
 
       cancelMotion();
 
-      viewportHeight = getViewportHeight(viewport);
+      viewportHeight = getViewportHeight();
 
       dragY = 0;
       velocityY = 0;
       motionDirection = 0;
 
-      resetGesture();
       prepareLayers(false);
       renderTrack(0);
-    };
+    }
 
     const prepareMotion = () => {
-      viewportHeight = getViewportHeight(viewport);
+      viewportHeight = getViewportHeight();
       prepareLayers(true);
     };
 
@@ -189,7 +311,13 @@
        CINEMATIC RAF
        ========================================================= */
 
-    const animate = ({ from, to, duration, easing, complete }) => {
+    const animate = ({
+      from,
+      to,
+      duration,
+      easing,
+      complete
+    }) => {
       cancelMotion();
 
       const token = motionToken;
@@ -200,8 +328,6 @@
 
       const frame = now => {
         if (
-          destroyed ||
-          !enabled ||
           !animating ||
           token !== motionToken
         ) {
@@ -210,12 +336,16 @@
         }
 
         const progress = clamp(
-          (now - startedAt) / Math.max(1, duration),
+          (now - startedAt) /
+            Math.max(1, duration),
           0,
           1
         );
 
-        dragY = from + distance * easing(progress);
+        dragY =
+          from +
+          distance * easing(progress);
+
         renderTrack(dragY);
 
         if (progress < 1) {
@@ -225,9 +355,12 @@
 
         raf = 0;
         dragY = to;
+
         renderTrack(to);
 
-        complete?.();
+        if (typeof complete === 'function') {
+          complete();
+        }
       };
 
       raf = requestAnimationFrame(frame);
@@ -237,51 +370,193 @@
        DURATION
        ========================================================= */
 
-    const getCommitDuration = remainingDistance => {
-      const distanceRatio = clamp(
-        remainingDistance / Math.max(1, viewportHeight),
-        0,
-        1
-      );
+    const getCommitDuration =
+      remainingDistance => {
+        const distanceRatio = clamp(
+          remainingDistance /
+            Math.max(1, viewportHeight),
+          0,
+          1
+        );
 
-      const velocityReduction = clamp(
-        Math.abs(velocityY) * config.commitVelocityInfluence * 100,
-        0,
-        110
-      );
+        const velocityReduction = clamp(
+          Math.abs(velocityY) *
+            config.commitVelocityInfluence *
+            100,
+          0,
+          110
+        );
 
-      const duration =
-        config.commitMinDurationMs +
-        distanceRatio *
-          (config.commitDistanceDurationMs - config.commitMinDurationMs) -
-        velocityReduction;
+        const duration =
+          config.commitMinDurationMs +
+          distanceRatio *
+            (
+              config.commitDistanceDurationMs -
+              config.commitMinDurationMs
+            ) -
+          velocityReduction;
 
-      return clamp(
-        duration,
-        config.commitMinDurationMs,
-        config.commitMaxDurationMs
-      );
-    };
+        return clamp(
+          duration,
+          config.commitMinDurationMs,
+          config.commitMaxDurationMs
+        );
+      };
 
     /* =========================================================
-       RECYCLE
+       VIDEO RECYCLE
        ========================================================= */
 
-    const recycle = direction => {
-      if (!isDirection(direction)) return false;
+    function recycle(direction) {
+      if (!isDirection(direction)) {
+        return false;
+      }
+
+      const oldCurrentVideo =
+        refs.videoCurrent;
+
+      if (oldCurrentVideo) {
+        oldCurrentVideo.pause();
+      }
+
+      state.index = normalizeIndex(
+        state.index + direction
+      );
+
+      if (direction > 0) {
+        const oldPrevLayer =
+          refs.layerPrev;
+        const oldPrevVideo =
+          refs.videoPrev;
+        const oldPrevImg =
+          refs.imgPrev;
+
+        const oldCurrentLayer =
+          refs.layerCurrent;
+        const oldCurrentVideoRef =
+          refs.videoCurrent;
+        const oldCurrentImg =
+          refs.imgCurrent;
+
+        refs.layerCurrent =
+          refs.layerNext;
+        refs.videoCurrent =
+          refs.videoNext;
+        refs.imgCurrent =
+          refs.imgNext;
+
+        refs.layerPrev =
+          oldCurrentLayer;
+        refs.videoPrev =
+          oldCurrentVideoRef;
+        refs.imgPrev =
+          oldCurrentImg;
+
+        refs.layerNext =
+          oldPrevLayer;
+        refs.videoNext =
+          oldPrevVideo;
+        refs.imgNext =
+          oldPrevImg;
+
+        prevLoadedIndex =
+          normalizeIndex(
+            state.index - 1
+          );
+
+        nextLoadedIndex = null;
+      } else {
+        const oldNextLayer =
+          refs.layerNext;
+        const oldNextVideo =
+          refs.videoNext;
+        const oldNextImg =
+          refs.imgNext;
+
+        const oldCurrentLayer =
+          refs.layerCurrent;
+        const oldCurrentVideoRef =
+          refs.videoCurrent;
+        const oldCurrentImg =
+          refs.imgCurrent;
+
+        refs.layerCurrent =
+          refs.layerPrev;
+        refs.videoCurrent =
+          refs.videoPrev;
+        refs.imgCurrent =
+          refs.imgPrev;
+
+        refs.layerNext =
+          oldCurrentLayer;
+        refs.videoNext =
+          oldCurrentVideoRef;
+        refs.imgNext =
+          oldCurrentImg;
+
+        refs.layerPrev =
+          oldNextLayer;
+        refs.videoPrev =
+          oldNextVideo;
+        refs.imgPrev =
+          oldNextImg;
+
+        nextLoadedIndex =
+          normalizeIndex(
+            state.index + 1
+          );
+
+        prevLoadedIndex = null;
+      }
+
+      if (
+        refs.playOverlay &&
+        refs.layerCurrent
+      ) {
+        refs.layerCurrent.appendChild(
+          refs.playOverlay
+        );
+      }
+
+      viewportHeight =
+        getViewportHeight();
 
       dragY = 0;
       velocityY = 0;
 
-      onCommit?.(direction);
-
-      if (destroyed || !hasLayers()) return false;
-
-      viewportHeight = getViewportHeight(viewport);
       renderTrack(0);
 
+      syncSoundUI();
+      showPlayOverlay(false);
+
+      document.dispatchEvent(
+        new CustomEvent(
+          'tikboo:swipe:commit'
+        )
+      );
+
+      bindAutoAdvanceForCurrent();
+
+      const currentItem =
+        playlist[state.index];
+
+      if (
+        currentItem?.type === 'video' &&
+        refs.videoCurrent
+      ) {
+        refs.videoCurrent.muted =
+          state.isMuted;
+
+        tryPlay(refs.videoCurrent);
+      }
+
+      requestAnimationFrame(() => {
+        prepareForwardLayer();
+        prepareBackwardLayer();
+      });
+
       return true;
-    };
+    }
 
     /* =========================================================
        COMMIT
@@ -289,49 +564,78 @@
 
     const finishCommit = direction => {
       animating = false;
+      state.isAnimating = false;
       motionDirection = 0;
 
       recycle(direction);
 
-      if (destroyed || !hasLayers()) return;
+      if (!hasLayers()) return;
 
       resetGesture();
       prepareLayers(false);
     };
 
-    const commit = direction => {
+    function commit(direction) {
       if (
-        destroyed ||
-        !enabled ||
         !hasLayers() ||
         !isDirection(direction)
       ) {
         return false;
       }
 
-      if (animating) return false;
+      if (animating) {
+        return false;
+      }
 
-      viewportHeight = getViewportHeight(viewport);
+      if (direction > 0) {
+        prepareForwardLayer();
+      } else {
+        prepareBackwardLayer();
+      }
 
-      const destination = direction > 0 ? -viewportHeight : viewportHeight;
-      const from = clamp(dragY, -viewportHeight, viewportHeight);
-      const remainingDistance = Math.abs(destination - from);
+      viewportHeight =
+        getViewportHeight();
+
+      const destination =
+        direction > 0
+          ? -viewportHeight
+          : viewportHeight;
+
+      const from = clamp(
+        dragY,
+        -viewportHeight,
+        viewportHeight
+      );
+
+      const remainingDistance =
+        Math.abs(
+          destination - from
+        );
 
       animating = true;
+      state.isAnimating = true;
+
       dragging = false;
       takingOver = false;
       motionDirection = direction;
 
+      clearAuto();
+      stopProg();
+
       animate({
         from,
         to: destination,
-        duration: getCommitDuration(remainingDistance),
+        duration:
+          getCommitDuration(
+            remainingDistance
+          ),
         easing: cinematicEase,
-        complete: () => finishCommit(direction)
+        complete: () =>
+          finishCommit(direction)
       });
 
       return true;
-    };
+    }
 
     /* =========================================================
        SNAP BACK
@@ -339,6 +643,7 @@
 
     const finishSnapBack = () => {
       animating = false;
+      state.isAnimating = false;
       motionDirection = 0;
 
       dragY = 0;
@@ -347,24 +652,45 @@
       resetGesture();
       renderTrack(0);
       prepareLayers(false);
+
+      bindAutoAdvanceForCurrent();
     };
 
     const snapBack = () => {
-      if (destroyed || !enabled || animating) return;
+      if (
+        animating ||
+        !hasLayers()
+      ) {
+        return;
+      }
 
-      viewportHeight = getViewportHeight(viewport);
+      viewportHeight =
+        getViewportHeight();
 
-      const from = clamp(dragY, -viewportHeight, viewportHeight);
-      const ratio = Math.abs(from) / Math.max(1, viewportHeight);
+      const from = clamp(
+        dragY,
+        -viewportHeight,
+        viewportHeight
+      );
+
+      const ratio =
+        Math.abs(from) /
+        Math.max(1, viewportHeight);
 
       const duration = clamp(
         config.snapMinDurationMs +
-          ratio * (config.snapMaxDurationMs - config.snapMinDurationMs),
+          ratio *
+            (
+              config.snapMaxDurationMs -
+              config.snapMinDurationMs
+            ),
         config.snapMinDurationMs,
         config.snapMaxDurationMs
       );
 
       animating = true;
+      state.isAnimating = true;
+
       dragging = false;
       takingOver = false;
       motionDirection = 0;
@@ -384,8 +710,6 @@
 
     const beginTakeover = (x, y) => {
       if (
-        destroyed ||
-        !enabled ||
         !animating ||
         !isDirection(motionDirection)
       ) {
@@ -408,96 +732,123 @@
       return true;
     };
 
-    const activateTakeover = (x, y, dy) => {
-      const direction = motionDirection;
+    const activateTakeover =
+      (x, y, dy) => {
+        const direction =
+          motionDirection;
 
-      takeoverOrigin = dragY;
+        takeoverOrigin = dragY;
 
-      cancelMotion();
+        cancelMotion();
 
-      animating = false;
-      motionDirection = 0;
+        animating = false;
+        state.isAnimating = false;
+        motionDirection = 0;
 
-      if (!recycle(direction)) {
+        if (!recycle(direction)) {
+          takingOver = false;
+          dragging = false;
+          axis = null;
+          return false;
+        }
+
+        prepareMotion();
+
         takingOver = false;
-        dragging = false;
-        axis = null;
-        return false;
-      }
+        dragging = true;
+        axis = 'vertical';
 
-      prepareMotion();
+        const transferredDistance =
+          Math.sign(dy) *
+          Math.max(
+            0,
+            Math.abs(dy) -
+              config.takeoverMinDistancePx
+          );
 
-      takingOver = false;
-      dragging = true;
-      axis = 'vertical';
+        startX = x;
+        startY =
+          y - transferredDistance;
 
-      const transferredDistance = Math.sign(dy) * Math.max(
-        0,
-        Math.abs(dy) - config.takeoverMinDistancePx
-      );
+        lastY = y;
+        lastTime =
+          performance.now();
 
-      startX = x;
-      startY = y - transferredDistance;
+        dragY = clamp(
+          transferredDistance,
+          -viewportHeight,
+          viewportHeight
+        );
 
-      lastY = y;
-      lastTime = performance.now();
+        velocityY = 0;
 
-      dragY = clamp(
-        transferredDistance,
-        -viewportHeight,
-        viewportHeight
-      );
+        renderTrack(dragY);
 
-      velocityY = 0;
+        return true;
+      };
 
-      renderTrack(dragY);
-
-      return true;
-    };
-
-    const updateTakeover = (x, y) => {
-      if (!takingOver || !isDirection(motionDirection)) return false;
-
-      const dx = x - startX;
-      const dy = y - startY;
-
-      if (!axis) {
+    const updateTakeover =
+      (x, y) => {
         if (
-          Math.abs(dx) < config.axisLockPx &&
-          Math.abs(dy) < config.axisLockPx
+          !takingOver ||
+          !isDirection(motionDirection)
         ) {
           return false;
         }
 
-        axis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+        const dx = x - startX;
+        const dy = y - startY;
 
-        if (axis !== 'vertical') {
-          takingOver = false;
-          axis = null;
-          return false;
+        if (!axis) {
+          if (
+            Math.abs(dx) <
+              config.axisLockPx &&
+            Math.abs(dy) <
+              config.axisLockPx
+          ) {
+            return false;
+          }
+
+          axis =
+            Math.abs(dy) >
+            Math.abs(dx)
+              ? 'vertical'
+              : 'horizontal';
+
+          if (axis !== 'vertical') {
+            takingOver = false;
+            axis = null;
+            return false;
+          }
         }
-      }
 
-      const gestureDirection = dy < 0 ? 1 : -1;
+        const gestureDirection =
+          dy < 0 ? 1 : -1;
 
-      if (
-        gestureDirection !== motionDirection ||
-        Math.abs(dy) < config.takeoverMinDistancePx
-      ) {
-        return true;
-      }
+        if (
+          gestureDirection !==
+            motionDirection ||
+          Math.abs(dy) <
+            config.takeoverMinDistancePx
+        ) {
+          return true;
+        }
 
-      return activateTakeover(x, y, dy);
-    };
+        return activateTakeover(
+          x,
+          y,
+          dy
+        );
+      };
 
     /* =========================================================
        NORMAL GESTURE
        ========================================================= */
 
     const beginGesture = (x, y) => {
-      if (destroyed || !enabled) return false;
-
-      if (animating) return beginTakeover(x, y);
+      if (animating) {
+        return beginTakeover(x, y);
+      }
 
       cancelMotion();
       prepareMotion();
@@ -510,228 +861,304 @@
       startY = y;
 
       lastY = y;
-      lastTime = performance.now();
+      lastTime =
+        performance.now();
 
       dragY = 0;
       velocityY = 0;
+
+      clearAuto();
+      stopProg();
+
+      prepareForwardLayer();
+      prepareBackwardLayer();
 
       return true;
     };
 
     const updateDrag = (x, y) => {
-      if (!dragging) return false;
+      if (!dragging) {
+        return false;
+      }
 
       const dx = x - startX;
       const dy = y - startY;
 
       if (!axis) {
         if (
-          Math.abs(dx) < config.axisLockPx &&
-          Math.abs(dy) < config.axisLockPx
+          Math.abs(dx) <
+            config.axisLockPx &&
+          Math.abs(dy) <
+            config.axisLockPx
         ) {
           return false;
         }
 
-        axis = Math.abs(dy) > Math.abs(dx) ? 'vertical' : 'horizontal';
+        axis =
+          Math.abs(dy) >
+          Math.abs(dx)
+            ? 'vertical'
+            : 'horizontal';
 
         if (axis !== 'vertical') {
           dragging = false;
-          resetGeometry();
+          resetTransformsNoAnim();
           return false;
         }
       }
 
-      const now = performance.now();
-      const dt = Math.max(1, now - lastTime);
-      const instantVelocity = (y - lastY) / dt;
+      const now =
+        performance.now();
+
+      const dt =
+        Math.max(
+          1,
+          now - lastTime
+        );
+
+      const instantVelocity =
+        (y - lastY) / dt;
 
       velocityY =
-        velocityY * (1 - config.velocitySmoothing) +
-        instantVelocity * config.velocitySmoothing;
+        velocityY *
+          (
+            1 -
+            config.velocitySmoothing
+          ) +
+        instantVelocity *
+          config.velocitySmoothing;
 
       lastY = y;
       lastTime = now;
 
-      dragY = clamp(dy, -viewportHeight, viewportHeight);
+      dragY = clamp(
+        dy,
+        -viewportHeight,
+        viewportHeight
+      );
+
       renderTrack(dragY);
 
       return true;
     };
 
-    const updateGesture = (x, y) => {
-      if (destroyed || !enabled) return false;
+    const updateGesture =
+      (x, y) => {
+        if (
+          takingOver &&
+          animating
+        ) {
+          return updateTakeover(
+            x,
+            y
+          );
+        }
 
-      if (takingOver && animating) return updateTakeover(x, y);
-      if (dragging && !animating) return updateDrag(x, y);
+        if (
+          dragging &&
+          !animating
+        ) {
+          return updateDrag(
+            x,
+            y
+          );
+        }
 
-      return false;
-    };
+        return false;
+      };
 
     /* =========================================================
        END GESTURE
        ========================================================= */
 
-    const endGesture = cancelled => {
-      if (destroyed || !enabled) return;
+    const endGesture =
+      cancelled => {
+        if (
+          takingOver &&
+          animating
+        ) {
+          takingOver = false;
+          axis = null;
+          return;
+        }
 
-      if (takingOver && animating) {
-        takingOver = false;
-        axis = null;
-        return;
-      }
+        if (
+          !dragging ||
+          animating
+        ) {
+          return;
+        }
 
-      if (!dragging || animating) return;
+        const distance =
+          Math.abs(dragY);
 
-      const distance = Math.abs(dragY);
+        const threshold =
+          Math.max(
+            config.commitMinDistancePx,
+            viewportHeight *
+              config.commitDistanceRatio
+          );
 
-      const threshold = Math.max(
-        config.commitMinDistancePx,
-        viewportHeight * config.commitDistanceRatio
-      );
+        const distanceCommit =
+          distance >= threshold;
 
-      const distanceCommit = distance >= threshold;
+        const flickCommit =
+          distance >=
+            config.flickMinDistancePx &&
+          Math.abs(velocityY) >=
+            config.flickVelocityPxMs &&
+          Math.sign(velocityY) ===
+            Math.sign(dragY);
 
-      const flickCommit =
-        distance >= config.flickMinDistancePx &&
-        Math.abs(velocityY) >= config.flickVelocityPxMs &&
-        Math.sign(velocityY) === Math.sign(dragY);
+        if (
+          !cancelled &&
+          axis === 'vertical' &&
+          dragY !== 0 &&
+          (
+            distanceCommit ||
+            flickCommit
+          )
+        ) {
+          commit(
+            dragY < 0 ? 1 : -1
+          );
 
-      if (
-        !cancelled &&
-        axis === 'vertical' &&
-        dragY !== 0 &&
-        (distanceCommit || flickCommit)
-      ) {
-        commit(dragY < 0 ? 1 : -1);
-        return;
-      }
+          return;
+        }
 
-      if (axis === 'vertical' && dragY !== 0) {
-        snapBack();
-        return;
-      }
+        if (
+          axis === 'vertical' &&
+          dragY !== 0
+        ) {
+          snapBack();
+          return;
+        }
 
-      resetGesture();
-      resetGeometry();
-    };
+        const isTap =
+          Math.abs(dragY) <
+          config.axisLockPx;
+
+        resetGesture();
+        resetTransformsNoAnim();
+
+        if (
+          isTap &&
+          refs.videoCurrent
+        ) {
+          if (
+            refs.videoCurrent.paused
+          ) {
+            if (
+              typeof ensureSoundOn ===
+              'function'
+            ) {
+              ensureSoundOn(true);
+            } else {
+              tryPlay(
+                refs.videoCurrent
+              );
+            }
+
+            showPlayOverlay(false);
+          } else {
+            refs.videoCurrent.pause();
+            stopProg();
+            showPlayOverlay(true);
+          }
+        }
+
+        bindAutoAdvanceForCurrent();
+      };
 
     /* =========================================================
        EXCLUDED TARGET
        ========================================================= */
 
-    const isExcludedTarget = target =>
-      Boolean(
-        exclude &&
-        target instanceof Element &&
-        target.closest(exclude)
-      );
+    const isExcludedTarget =
+      target => {
+        if (
+          typeof isInteractiveTarget ===
+          'function'
+        ) {
+          return isInteractiveTarget(
+            target
+          );
+        }
+
+        return false;
+      };
 
     /* =========================================================
        TOUCH
        ========================================================= */
 
-    const handleTouchStart = event => {
-      if (
-        destroyed ||
-        !enabled ||
-        event.touches.length !== 1 ||
-        isExcludedTarget(event.target)
-      ) {
-        return;
-      }
+    const handleTouchStart =
+      event => {
+        touchBlocked =
+          event.touches.length !== 1 ||
+          isExcludedTarget(
+            event.target
+          );
 
-      const touch = event.touches[0];
-      beginGesture(touch.clientX, touch.clientY);
-    };
+        if (touchBlocked) {
+          return;
+        }
 
-    const handleTouchMove = event => {
-      if (
-        destroyed ||
-        !enabled ||
-        event.touches.length !== 1 ||
-        (!dragging && !takingOver)
-      ) {
-        return;
-      }
+        const touch =
+          event.touches[0];
 
-      const touch = event.touches[0];
+        beginGesture(
+          touch.clientX,
+          touch.clientY
+        );
+      };
 
-      if (updateGesture(touch.clientX, touch.clientY)) {
-        event.preventDefault();
-      }
-    };
+    const handleTouchMove =
+      event => {
+        if (
+          touchBlocked ||
+          event.touches.length !== 1 ||
+          (
+            !dragging &&
+            !takingOver
+          )
+        ) {
+          return;
+        }
 
-    const handleTouchEnd = () => endGesture(false);
-    const handleTouchCancel = () => endGesture(true);
+        const touch =
+          event.touches[0];
 
-    /* =========================================================
-       POINTER
-       ========================================================= */
+        if (
+          !swipeSoundUnlocked &&
+          typeof ensureSoundOn ===
+            'function' &&
+          (
+            dragging ||
+            takingOver
+          )
+        ) {
+          ensureSoundOn(true);
+          swipeSoundUnlocked = true;
+        }
 
-    const handlePointerDown = event => {
-      if (
-        destroyed ||
-        !enabled ||
-        event.pointerType === 'touch' ||
-        event.button !== 0 ||
-        isExcludedTarget(event.target)
-      ) {
-        return;
-      }
+        if (
+          updateGesture(
+            touch.clientX,
+            touch.clientY
+          )
+        ) {
+          event.preventDefault();
+        }
+      };
 
-      if (!beginGesture(event.clientX, event.clientY)) return;
-
-      pointerId = event.pointerId;
-      viewport.setPointerCapture?.(pointerId);
-
-      event.preventDefault();
-    };
-
-    const handlePointerMove = event => {
-      if (
-        destroyed ||
-        !enabled ||
-        event.pointerType === 'touch' ||
-        pointerId !== event.pointerId ||
-        (!dragging && !takingOver)
-      ) {
-        return;
-      }
-
-      if (updateGesture(event.clientX, event.clientY)) {
-        event.preventDefault();
-      }
-    };
-
-    const releasePointer = event => {
-      if (viewport.hasPointerCapture?.(event.pointerId)) {
-        viewport.releasePointerCapture(event.pointerId);
-      }
-
-      resetPointer();
-    };
-
-    const handlePointerUp = event => {
-      if (
-        event.pointerType === 'touch' ||
-        pointerId !== event.pointerId
-      ) {
-        return;
-      }
-
-      releasePointer(event);
+    const handleTouchEnd = () => {
+      touchBlocked = false;
       endGesture(false);
     };
 
-    const handlePointerCancel = event => {
-      if (
-        event.pointerType === 'touch' ||
-        pointerId !== event.pointerId
-      ) {
-        return;
-      }
-
-      releasePointer(event);
+    const handleTouchCancel = () => {
+      touchBlocked = false;
       endGesture(true);
     };
 
@@ -739,135 +1166,129 @@
        LISTENERS
        ========================================================= */
 
-    viewport.addEventListener('touchstart', handleTouchStart, { passive: true });
-    viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
-    viewport.addEventListener('touchend', handleTouchEnd, { passive: true });
-    viewport.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+    document.addEventListener(
+      'touchstart',
+      handleTouchStart,
+      { passive: true }
+    );
 
-    viewport.addEventListener('pointerdown', handlePointerDown);
-    viewport.addEventListener('pointermove', handlePointerMove);
-    viewport.addEventListener('pointerup', handlePointerUp);
-    viewport.addEventListener('pointercancel', handlePointerCancel);
+    document.addEventListener(
+      'touchmove',
+      handleTouchMove,
+      { passive: false }
+    );
+
+    document.addEventListener(
+      'touchend',
+      handleTouchEnd,
+      { passive: true }
+    );
+
+    document.addEventListener(
+      'touchcancel',
+      handleTouchCancel,
+      { passive: true }
+    );
 
     /* =========================================================
-       PUBLIC API
+       AUTO ADVANCE
        ========================================================= */
 
-    const setLayers = nextLayers => {
-      if (destroyed) return;
-
-      previous = nextLayers?.previous || previous;
-      current = nextLayers?.current || current;
-      next = nextLayers?.next || next;
-
-      if (hasLayers()) {
-        viewportHeight = getViewportHeight(viewport);
-        renderTrack(dragY);
+    function autoAdvance() {
+      if (
+        animating ||
+        dragging ||
+        takingOver
+      ) {
+        return;
       }
-    };
 
-    const enable = () => {
-      if (destroyed) return;
+      prepareForwardLayer();
+      commit(1);
+    }
 
-      enabled = true;
-      animating = false;
-      motionDirection = 0;
+    /* =========================================================
+       VISIBILITY / RECOVERY
+       ========================================================= */
 
-      resetPointer();
-      resetGesture();
-      resetGeometry();
-    };
-
-    const disable = () => {
-      if (destroyed) return;
-
-      enabled = false;
-      animating = false;
-      motionDirection = 0;
-
-      cancelMotion();
-      resetPointer();
-      resetGesture();
-
-      if (hasLayers()) {
-        viewportHeight = getViewportHeight(viewport);
-        dragY = 0;
-
-        prepareLayers(false);
-        renderTrack(0);
-      }
-    };
-
-    const reset = () => {
-      if (destroyed) return;
-
-      animating = false;
-      motionDirection = 0;
-
-      resetPointer();
-      resetGesture();
-      resetGeometry();
-    };
-
-    const resize = () => {
-      if (destroyed || !hasLayers()) return;
-
-      viewportHeight = getViewportHeight(viewport);
-
-      if (!dragging && !animating && !takingOver) {
-        resetGeometry();
-      }
-    };
-
-    const destroy = () => {
-      if (destroyed) return;
-
-      enabled = false;
-      destroyed = true;
-
-      animating = false;
-      dragging = false;
-      takingOver = false;
-      motionDirection = 0;
-
+    function recoverVisibleState() {
       cancelMotion();
 
-      viewport.removeEventListener('touchstart', handleTouchStart);
-      viewport.removeEventListener('touchmove', handleTouchMove);
-      viewport.removeEventListener('touchend', handleTouchEnd);
-      viewport.removeEventListener('touchcancel', handleTouchCancel);
+      animating = false;
+      state.isAnimating = false;
+      motionDirection = 0;
 
-      viewport.removeEventListener('pointerdown', handlePointerDown);
-      viewport.removeEventListener('pointermove', handlePointerMove);
-      viewport.removeEventListener('pointerup', handlePointerUp);
-      viewport.removeEventListener('pointercancel', handlePointerCancel);
+      resetGesture();
+      resetTransformsNoAnim();
 
-      layers().forEach(layer => {
-        layer.style.transition = '';
-        layer.style.willChange = '';
-        layer.style.transform = '';
+      bindAutoAdvanceForCurrent();
+
+      const item =
+        playlist[state.index];
+
+      if (
+        item?.type === 'video' &&
+        refs.videoCurrent
+      ) {
+        refs.videoCurrent.muted =
+          state.isMuted;
+
+        tryPlay(
+          refs.videoCurrent
+        );
+      }
+
+      requestAnimationFrame(() => {
+        prepareForwardLayer();
+        prepareBackwardLayer();
       });
+    }
 
-      previous = null;
-      current = null;
-      next = null;
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+        if (
+          document.visibilityState ===
+          'visible'
+        ) {
+          recoverVisibleState();
+        }
+      },
+      { passive: true }
+    );
 
-      resetPointer();
-    };
+    window.addEventListener(
+      'pageshow',
+      recoverVisibleState,
+      { passive: true }
+    );
 
     /* =========================================================
        INITIAL GEOMETRY
        ========================================================= */
 
-    viewportHeight = getViewportHeight(viewport);
-    resetGeometry();
+    viewportHeight =
+      getViewportHeight();
 
-    return { setLayers, enable, disable, reset, resize, commit, destroy };
-  };
+    resetTransformsNoAnim();
 
-  /* =========================================================
-     GLOBAL
-     ========================================================= */
+    /* =========================================================
+       PUBLIC API — COMPATIBLE WITH APP.JS
+       ========================================================= */
 
-  window.VBSwipe = Object.freeze({ create });
+    return {
+      autoAdvance,
+      warmForwardNext,
+      warmBackwardNext,
+      commit,
+      resetTransformsNoAnim,
+
+      isDragging() {
+        return dragging;
+      }
+    };
+  }
+
+  window.initTikbooSwipe =
+    initTikbooSwipe;
 })();
